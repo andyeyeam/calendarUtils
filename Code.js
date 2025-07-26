@@ -98,7 +98,7 @@ function getSkipLevel1to1List() {
                 isRecurring: true,
                 seriesId: seriesId,
                 nextOccurrence: eventStartTime.toLocaleDateString() + ' ' + eventStartTime.toLocaleTimeString(),
-                description: event.getDescription() || '',
+                description: (event.getDescription() || '').substring(0, 500),
                 startTime: eventStartTime,
                 id: event.getId(),
                 htmlLink: 'https://calendar.google.com/calendar/u/0/r/day/' + eventStartTime.getFullYear() + '/' + (eventStartTime.getMonth() + 1) + '/' + eventStartTime.getDate()
@@ -113,7 +113,7 @@ function getSkipLevel1to1List() {
                   isRecurring: true,
                   seriesId: seriesId,
                   nextOccurrence: eventStartTime.toLocaleDateString() + ' ' + eventStartTime.toLocaleTimeString(),
-                  description: event.getDescription() || '',
+                  description: (event.getDescription() || '').substring(0, 500),
                   startTime: eventStartTime,
                   id: event.getId(),
                   htmlLink: 'https://calendar.google.com/calendar/u/0/r/day/' + eventStartTime.getFullYear() + '/' + (eventStartTime.getMonth() + 1) + '/' + eventStartTime.getDate()
