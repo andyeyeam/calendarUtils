@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <base target="_top">
+    <title>Andy's Calendar Utilities</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 400px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .button {
+            display: block;
+            width: 100%;
+            padding: 15px;
+            margin: 15px 0;
+            background-color: #4285f4;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            text-align: center;
+            text-decoration: none;
+        }
+        .button:hover {
+            background-color: #3367d6;
+        }
+        .button:active {
+            background-color: #2851a3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Andy's Calendar Utilities</h1>
+        
+        <button class="button" onclick="handleAvailabilityFinder()">
+            Availability Finder
+        </button>
+        
+        <button class="button" onclick="handleSkipLevelManager()">
+            Skip Level Manager
+        </button>
+    </div>
+
+    <script>
+        function handleAvailabilityFinder() {
+            google.script.run
+                .withSuccessHandler(onSuccess)
+                .withFailureHandler(onFailure)
+                .onAvailabilityFinderClick();
+        }
+
+        function handleSkipLevelManager() {
+            google.script.run
+                .withSuccessHandler(onSuccess)
+                .withFailureHandler(onFailure)
+                .onSkipLevelManagerClick();
+        }
+
+        function onSuccess(result) {
+            console.log('Success:', result);
+            alert(result);
+        }
+
+        function onFailure(error) {
+            console.error('Error:', error);
+            alert('An error occurred: ' + error.message);
+        }
+    </script>
+</body>
+</html>
