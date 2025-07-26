@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <base target="_top">
+    <meta http-equiv="Permissions-Policy" content="ambient-light-sensor=(), speaker=(), vibrate=(), vr=()">
+    <title>Availability Finder - Andy's Calendar Utilities</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        input[type="date"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        .button {
+            display: inline-block;
+            padding: 12px 24px;
+            margin: 10px 5px;
+            background-color: #4285f4;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            text-decoration: none;
+        }
+        .button:hover {
+            background-color: #3367d6;
+        }
+        .button.secondary {
+            background-color: #6c757d;
+        }
+        .button.secondary:hover {
+            background-color: #5a6268;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            color: #666;
+            font-style: italic;
+        }
+        .events-container {
+            margin-top: 30px;
+        }
+        .event-item {
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 10px;
+            background-color: #fafafa;
+        }
+        .event-title {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        .event-time {
+            color: #666;
+            margin-bottom: 5px;
+        }
+        .event-description {
+            color: #555;
+            font-style: italic;
+        }
+        .no-events {
+            text-align: center;
+            color: #666;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Availability Finder</h1>
+        
+        <form id="dateForm">
+            <div class="form-group">
+                <label for="startDate">Start Date:</label>
+                <input type="date" id="startDate" name="startDate" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="endDate">End Date:</label>
+                <input type="date" id="endDate" name="endDate" required>
+            </div>
+            
+            <div style="text-align: center;">
+                <button type="submit" class="button">Find Events</button>
+                <button type="button" class="button secondary" onclick="testConnection()">Test Connection</button>
+                <button type="button" class="button secondary" onclick="goBack()">Back to Menu</button>
+            </div>
+        </form>
+        
+        <div class="loading" id="loading">
+            Loading calendar events...
+        </div>
+        
+        <div class="events-container" id="eventsContainer" style="display: none;">
+            <h2>Calendar Events</h2>
+            <div id="eventsList"></div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('dateForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            console.log('Form submitted');
+            
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            
+            console.log('Start date:', startDate);
+            console.log('End date:', endDate);
+            
+            if (!startDate || !endDate) {
+                alert('Please select both start and end dates.');
+                return;
+            }
+            
+            if (new Date(startDate) > new Date(endDate)) {
+                alert('Start date must be before or equal to end date.');
+                return;
+            }
+            
+            console.log('Validation passed, calling server function');
+            
+            // Show loading indicator
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('eventsContainer').style.display = 'none';
+            
+            try {
+                // Call the server function
+                console.log('About to call google.script.run.getCalendarEvents');
+                google.script.run
+                    .withSuccessHandler(displayEvents)
+                    .withFailureHandler(onError)
+                    .getCalendarEvents(startDate, endDate);
+                console.log('Server function called');
+            } catch (error) {
+                console.error('Error calling server function:', error);
+                onError(error);
+            }
+        });
+        
+        function displayEvents(events) {
+            console.log('Received events:', events);
+            console.log('Events type:', typeof events);
+            console.log('Events length:', events ? events.length : 'undefined');
+            
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('eventsContainer').style.display = 'block';
+            
+            const eventsList = document.getElementById('eventsList');
+            
+            // Handle case where events might be null or undefined
+            if (!events || !Array.isArray(events)) {
+                console.error('Events is not an array:', events);
+                eventsList.innerHTML = '<div class="no-events">Error: Invalid events data received.</div>';
+                return;
+            }
+            
+            if (events.length === 0) {
+                eventsList.innerHTML = '<div class="no-events">No events found in the selected date range.</div>';
+            } else {
+                let html = '';
+                events.forEach((event, index) => {
+                    console.log('Processing event ' + index + ':', event);
+                    html += `
+                        <div class="event-item">
+                            <div class="event-title">${escapeHtml(event.title || 'Untitled Event')}</div>
+                            <div class="event-time">${escapeHtml(event.start || 'No start time')} - ${escapeHtml(event.end || 'No end time')}</div>
+                            ${event.description ? `<div class="event-description">${escapeHtml(event.description)}</div>` : ''}
+                        </div>
+                    `;
+                });
+                eventsList.innerHTML = html;
+                console.log('HTML generated:', html);
+            }
+        }
+        
+        function onError(error) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('eventsContainer').style.display = 'block';
+            console.error('Error:', error);
+            
+            const eventsList = document.getElementById('eventsList');
+            eventsList.innerHTML = `
+                <div class="no-events">
+                    <strong>Error occurred:</strong><br>
+                    ${error.message || error.toString()}<br><br>
+                    <small>Check the browser console for more details.</small>
+                </div>
+            `;
+            
+            alert('An error occurred while fetching calendar events: ' + (error.message || error.toString()));
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        function testConnection() {
+            console.log('Testing connection...');
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    console.log('Test result:', result);
+                    alert('Connection test successful: ' + result);
+                })
+                .withFailureHandler(function(error) {
+                    console.error('Connection test failed:', error);
+                    alert('Connection test failed: ' + error.message);
+                })
+                .testConnection();
+        }
+        
+        function goBack() {
+            google.script.run
+                .withSuccessHandler(function(html) {
+                    document.documentElement.innerHTML = html;
+                })
+                .withFailureHandler(onError)
+                .getIndexPage();
+        }
+    </script>
+</body>
+</html>

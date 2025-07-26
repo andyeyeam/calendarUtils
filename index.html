@@ -2,6 +2,7 @@
 <html>
 <head>
     <base target="_top">
+    <meta http-equiv="Permissions-Policy" content="ambient-light-sensor=(), speaker=(), vibrate=(), vr=()">
     <title>Andy's Calendar Utilities</title>
     <style>
         body {
@@ -55,14 +56,153 @@
         <button class="button" onclick="handleSkipLevelManager()">
             Skip Level Manager
         </button>
+        
+        <button class="button secondary" onclick="testConnection()" style="background-color: #6c757d; margin-top: 10px;">
+            Test Connection
+        </button>
     </div>
 
     <script>
+        // Test that JavaScript is working
+        console.log('JavaScript loaded successfully');
+        
+        // Test page load
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Page loaded successfully');
+        });
+        
         function handleAvailabilityFinder() {
-            google.script.run
-                .withSuccessHandler(onSuccess)
-                .withFailureHandler(onFailure)
-                .onAvailabilityFinderClick();
+            console.log('Availability Finder button clicked');
+            
+            // Check if google.script.run is available
+            if (typeof google === 'undefined' || typeof google.script === 'undefined') {
+                alert('Error: Google Apps Script not available. Make sure this is running as a deployed web app.');
+                console.error('google.script.run not available');
+                return;
+            }
+            
+            // Show the date selection form
+            const container = document.querySelector('.container');
+            container.style.maxWidth = '800px'; // Make wider for calendar events
+            container.innerHTML = `
+                <h1>Availability Finder</h1>
+                
+                <form id="dateForm" style="margin-bottom: 30px;">
+                    <div style="margin-bottom: 20px;">
+                        <label for="startDate" style="display: block; margin-bottom: 5px; font-weight: bold; color: #555;">Start Date:</label>
+                        <input type="date" id="startDate" name="startDate" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 16px; box-sizing: border-box;">
+                    </div>
+                    
+                    <div style="margin-bottom: 20px;">
+                        <label for="endDate" style="display: block; margin-bottom: 5px; font-weight: bold; color: #555;">End Date:</label>
+                        <input type="date" id="endDate" name="endDate" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 16px; box-sizing: border-box;">
+                    </div>
+                    
+                    <div style="text-align: center;">
+                        <button type="submit" class="button" style="width: 150px; margin: 5px;">Find Events</button>
+                        <button type="button" class="button" onclick="location.reload()" style="width: 150px; margin: 5px; background-color: #6c757d;">Back to Menu</button>
+                    </div>
+                </form>
+                
+                <div id="loading" style="display: none; text-align: center; color: #666; font-style: italic;">
+                    Loading calendar events...
+                </div>
+                
+                <div id="eventsContainer" style="margin-top: 30px; display: none;">
+                    <h2 id="eventsTitle">Calendar Events</h2>
+                    <div id="eventsList"></div>
+                </div>
+            `;
+            
+            // Add form submit handler
+            document.getElementById('dateForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                console.log('Form submitted');
+                
+                const startDate = document.getElementById('startDate').value;
+                const endDate = document.getElementById('endDate').value;
+                
+                console.log('Start date:', startDate);
+                console.log('End date:', endDate);
+                
+                if (!startDate || !endDate) {
+                    alert('Please select both start and end dates.');
+                    return;
+                }
+                
+                if (new Date(startDate) > new Date(endDate)) {
+                    alert('Start date must be before or equal to end date.');
+                    return;
+                }
+                
+                console.log('Dates validated:', startDate, 'to', endDate);
+                
+                // Show loading indicator
+                document.getElementById('loading').style.display = 'block';
+                document.getElementById('eventsContainer').style.display = 'none';
+                document.getElementById('eventsTitle').textContent = `Calendar Events (${startDate} to ${endDate})`;
+                
+                // Call the server function
+                console.log('Calling getCalendarEvents with form dates');
+                google.script.run
+                    .withSuccessHandler(displayEvents)
+                    .withFailureHandler(function(error) {
+                        console.error('Error getting calendar events:', error);
+                        document.getElementById('loading').style.display = 'none';
+                        document.getElementById('eventsContainer').style.display = 'block';
+                        document.getElementById('eventsList').innerHTML = `
+                            <div style="text-align: center; color: red; padding: 20px;">
+                                <strong>Error:</strong> ${error.message || error.toString()}
+                            </div>
+                        `;
+                    })
+                    .getCalendarEvents(startDate, endDate);
+            });
+        }
+        
+        function isValidDate(dateString) {
+            const regex = /^\d{4}-\d{2}-\d{2}$/;
+            if (!regex.test(dateString)) return false;
+            const date = new Date(dateString);
+            return date instanceof Date && !isNaN(date);
+        }
+        
+        function displayEvents(events) {
+            console.log('Received events:', events);
+            
+            document.getElementById('loading').style.display = 'none';
+            const eventsContainer = document.getElementById('eventsContainer');
+            const eventsList = document.getElementById('eventsList');
+            
+            if (!events || !Array.isArray(events)) {
+                eventsList.innerHTML = '<div style="text-align: center; color: red;">Error: Invalid events data received.</div>';
+                eventsContainer.style.display = 'block';
+                return;
+            }
+            
+            if (events.length === 0) {
+                eventsList.innerHTML = '<div style="text-align: center; color: #666;">No events found for the selected date range.</div>';
+            } else {
+                let html = '';
+                events.forEach((event, index) => {
+                    html += `
+                        <div style="border: 1px solid #e0e0e0; border-radius: 4px; padding: 15px; margin-bottom: 10px; background-color: #fafafa; word-wrap: break-word; overflow-wrap: break-word;">
+                            <div style="font-weight: bold; color: #333; margin-bottom: 5px; word-wrap: break-word;">${escapeHtml(event.title || 'Untitled Event')}</div>
+                            <div style="color: #666; margin-bottom: 5px; word-wrap: break-word;">${escapeHtml(event.start || 'No start time')} - ${escapeHtml(event.end || 'No end time')}</div>
+                            ${event.description ? `<div style="color: #555; font-style: italic; word-wrap: break-word;">${escapeHtml(event.description)}</div>` : ''}
+                        </div>
+                    `;
+                });
+                eventsList.innerHTML = html;
+            }
+            
+            eventsContainer.style.display = 'block';
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
         }
 
         function handleSkipLevelManager() {
@@ -76,7 +216,29 @@
             console.log('Success:', result);
             alert(result);
         }
+        
 
+        function testConnection() {
+            console.log('Testing connection from main page...');
+            alert('Test Connection clicked');
+            
+            if (typeof google === 'undefined' || typeof google.script === 'undefined') {
+                alert('Error: Google Apps Script not available. Make sure this is running as a deployed web app.');
+                return;
+            }
+            
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    console.log('Test result:', result);
+                    alert('Connection test successful: ' + result);
+                })
+                .withFailureHandler(function(error) {
+                    console.error('Connection test failed:', error);
+                    alert('Connection test failed: ' + error.message);
+                })
+                .testConnection();
+        }
+        
         function onFailure(error) {
             console.error('Error:', error);
             alert('An error occurred: ' + error.message);
