@@ -7,7 +7,7 @@ function doGet() {
 function onAvailabilityFinderClick() {
   Logger.log('Availability Finder button clicked');
   // Add your availability finder logic here
-  return 'Availability Finder functionality will be implemented here x';
+  return 'Availability Finder functionality will be implemented here xx';
 }
 
 function onSkipLevelManagerClick() {
