@@ -295,6 +295,99 @@ function clearMeetingSlots() {
   }
 }
 
+function removeSkipLevel(nameToRemove) {
+  Logger.log('Removing skip level for name: ' + nameToRemove);
+  
+  try {
+    if (!nameToRemove || typeof nameToRemove !== 'string') {
+      throw new Error('Name to remove must be provided as a string');
+    }
+    
+    const trimmedName = nameToRemove.trim();
+    if (trimmedName.length === 0) {
+      throw new Error('Name cannot be empty');
+    }
+    
+    // Get current names
+    const currentNames = getSkipLevelNames();
+    if (!currentNames.includes(trimmedName)) {
+      throw new Error('Name "' + trimmedName + '" not found in the stored names list');
+    }
+    
+    // Get the default calendar
+    const calendar = CalendarApp.getDefaultCalendar();
+    
+    // Calculate date range - today to one year ahead to find all instances
+    const today = new Date();
+    const oneYearAhead = new Date();
+    oneYearAhead.setFullYear(today.getFullYear() + 1);
+    
+    // Get all events in the date range
+    const allEvents = calendar.getEvents(today, oneYearAhead);
+    Logger.log('Total events found for removal search: ' + allEvents.length);
+    
+    // Find recurring events that contain both "Skip Level:" and the specific name
+    let foundEventSeries = null;
+    let deletedCount = 0;
+    
+    for (const event of allEvents) {
+      const title = event.getTitle();
+      
+      // Check if this event matches our criteria
+      if (title && title.includes('Skip Level:') && title.includes(trimmedName)) {
+        try {
+          const eventSeries = event.getEventSeries();
+          if (eventSeries) {
+            // This is a recurring event - we want to delete the entire series
+            if (!foundEventSeries) {
+              foundEventSeries = eventSeries;
+              Logger.log('Found recurring event series to delete: ' + title);
+              
+              // Delete the entire event series (all future occurrences)
+              eventSeries.deleteEventSeries();
+              deletedCount = 1; // We deleted the series, count as 1
+              Logger.log('Deleted recurring event series for: ' + trimmedName);
+              break; // We found and deleted the series, no need to continue
+            }
+          } else {
+            // This is a single event, delete it
+            event.deleteEvent();
+            deletedCount++;
+            Logger.log('Deleted single event: ' + title);
+          }
+        } catch (error) {
+          Logger.log('Error processing event "' + title + '": ' + error.toString());
+          // Continue with other events even if one fails
+        }
+      }
+    }
+    
+    if (deletedCount === 0) {
+      Logger.log('No calendar events found for name: ' + trimmedName);
+    }
+    
+    // Remove the name from the stored names list
+    const updatedNames = currentNames.filter(name => name !== trimmedName);
+    
+    // Save the updated names list
+    const properties = PropertiesService.getScriptProperties();
+    properties.setProperty('SKIP_LEVEL_NAMES', JSON.stringify(updatedNames));
+    
+    Logger.log('Successfully removed "' + trimmedName + '" from names list. Deleted ' + deletedCount + ' calendar event(s)');
+    
+    return {
+      success: true,
+      removedName: trimmedName,
+      deletedEventCount: deletedCount,
+      remainingNames: updatedNames
+    };
+    
+  } catch (error) {
+    Logger.log('Error in removeSkipLevel: ' + error.toString());
+    throw new Error('Failed to remove skip level: ' + error.message);
+  }
+}
+
 function checkMissingSkipLevels() {
   Logger.log('Checking missing skip levels');
   
