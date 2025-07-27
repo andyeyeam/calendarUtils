@@ -147,3 +147,154 @@ function getSkipLevel1to1List() {
     throw new Error('Failed to retrieve skip level 1:1 events: ' + error.message);
   }
 }
+
+function saveSkipLevelNames(names) {
+  Logger.log('Saving skip level names: ' + JSON.stringify(names));
+  
+  try {
+    if (!Array.isArray(names)) {
+      throw new Error('Names must be provided as an array');
+    }
+    
+    // Clean and validate names
+    const cleanNames = names
+      .map(name => String(name).trim())
+      .filter(name => name.length > 0);
+    
+    if (cleanNames.length === 0) {
+      throw new Error('No valid names provided');
+    }
+    
+    // Save to PropertiesService for persistence
+    const properties = PropertiesService.getScriptProperties();
+    properties.setProperty('SKIP_LEVEL_NAMES', JSON.stringify(cleanNames));
+    
+    Logger.log('Successfully saved ' + cleanNames.length + ' names');
+    return {
+      success: true,
+      count: cleanNames.length,
+      names: cleanNames
+    };
+    
+  } catch (error) {
+    Logger.log('Error in saveSkipLevelNames: ' + error.toString());
+    throw new Error('Failed to save skip level names: ' + error.message);
+  }
+}
+
+function getSkipLevelNames() {
+  Logger.log('Getting skip level names');
+  
+  try {
+    const properties = PropertiesService.getScriptProperties();
+    const savedNames = properties.getProperty('SKIP_LEVEL_NAMES');
+    
+    if (!savedNames) {
+      Logger.log('No saved names found');
+      return [];
+    }
+    
+    const names = JSON.parse(savedNames);
+    Logger.log('Retrieved ' + names.length + ' names: ' + JSON.stringify(names));
+    return names;
+    
+  } catch (error) {
+    Logger.log('Error in getSkipLevelNames: ' + error.toString());
+    throw new Error('Failed to retrieve skip level names: ' + error.message);
+  }
+}
+
+function clearSkipLevelNames() {
+  Logger.log('Clearing skip level names');
+  
+  try {
+    const properties = PropertiesService.getScriptProperties();
+    properties.deleteProperty('SKIP_LEVEL_NAMES');
+    
+    Logger.log('Successfully cleared skip level names');
+    return { success: true };
+    
+  } catch (error) {
+    Logger.log('Error in clearSkipLevelNames: ' + error.toString());
+    throw new Error('Failed to clear skip level names: ' + error.message);
+  }
+}
+
+function checkMissingSkipLevels() {
+  Logger.log('Checking missing skip levels');
+  
+  try {
+    // Get loaded names
+    const names = getSkipLevelNames();
+    if (names.length === 0) {
+      throw new Error('No names have been loaded. Please use "Load Skip Level Names" first.');
+    }
+    
+    Logger.log('Checking skip levels for ' + names.length + ' names: ' + JSON.stringify(names));
+    
+    // Get the default calendar
+    const calendar = CalendarApp.getDefaultCalendar();
+    
+    // Calculate date range - today to one year ahead
+    const today = new Date();
+    const oneYearAhead = new Date();
+    oneYearAhead.setFullYear(today.getFullYear() + 1);
+    
+    // Get all events in the date range
+    const allEvents = calendar.getEvents(today, oneYearAhead);
+    Logger.log('Total events found: ' + allEvents.length);
+    
+    // Filter events that contain "Skip Level:" in the title
+    const skipLevelEvents = allEvents.filter(event => {
+      const title = event.getTitle();
+      return title && title.includes('Skip Level:');
+    });
+    
+    Logger.log('Events with "Skip Level:" in title: ' + skipLevelEvents.length);
+    
+    // For each name, check if there's a recurring calendar event
+    const results = [];
+    
+    names.forEach(name => {
+      Logger.log('Checking for name: "' + name + '"');
+      
+      // Find recurring events that contain both "Skip Level:" and the name
+      const matchingEvents = skipLevelEvents.filter(event => {
+        const title = event.getTitle();
+        const hasName = title.includes(name);
+        let isRecurring = false;
+        
+        try {
+          const eventSeries = event.getEventSeries();
+          isRecurring = eventSeries !== null;
+        } catch (error) {
+          // If error getting event series, it's likely a single event
+          isRecurring = false;
+        }
+        
+        Logger.log('Event "' + title + '" - has name: ' + hasName + ', is recurring: ' + isRecurring);
+        return hasName && isRecurring;
+      });
+      
+      const found = matchingEvents.length > 0;
+      Logger.log('Name "' + name + '" - found: ' + found + ' (' + matchingEvents.length + ' matching events)');
+      
+      results.push({
+        name: name,
+        found: found,
+        eventCount: matchingEvents.length,
+        events: matchingEvents.map(event => ({
+          title: event.getTitle(),
+          nextOccurrence: event.getStartTime().toLocaleDateString() + ' ' + event.getStartTime().toLocaleTimeString()
+        }))
+      });
+    });
+    
+    Logger.log('Check results: ' + JSON.stringify(results));
+    return results;
+    
+  } catch (error) {
+    Logger.log('Error in checkMissingSkipLevels: ' + error.toString());
+    throw new Error('Failed to check missing skip levels: ' + error.message);
+  }
+}

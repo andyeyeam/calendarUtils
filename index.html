@@ -70,6 +70,14 @@
         <button class="button" onclick="handleSkipLevel1to1List()">
             Skip Level 1:1 List
         </button>
+        
+        <button class="button" onclick="handleLoadSkipLevelNames()">
+            Load Skip Level Names
+        </button>
+        
+        <button class="button" onclick="handleCheckMissingSkipLevels()">
+            Check missing Skip Levels
+        </button>
     </div>
 
     <script>
@@ -90,6 +98,59 @@
 
         
 
+        function handleLoadSkipLevelNames() {
+            console.log('Load Skip Level Names button clicked');
+            
+            // Check if google.script.run is available
+            if (typeof google === 'undefined' || typeof google.script === 'undefined') {
+                alert('Error: Google Apps Script not available. Make sure this is running as a deployed web app.');
+                console.error('google.script.run not available');
+                return;
+            }
+            
+            // Show file upload screen
+            const container = document.querySelector('.container');
+            container.style.maxWidth = '600px';
+            container.innerHTML = `
+                <h1>Load Skip Level Names</h1>
+                <div style="margin: 20px 0;">
+                    <p style="color: #666; text-align: center; margin-bottom: 20px;">
+                        Upload a text file containing names (one name per line)
+                    </p>
+                    
+                    <div style="border: 2px dashed #ccc; border-radius: 8px; padding: 30px; text-align: center; margin-bottom: 20px;">
+                        <input type="file" id="nameFileInput" accept=".txt,.text" style="margin-bottom: 15px;">
+                        <br>
+                        <button class="button" onclick="processNameFile()" style="width: auto; padding: 10px 20px;">
+                            Upload and Process File
+                        </button>
+                    </div>
+                    
+                    <div id="currentNames" style="margin-top: 20px;">
+                        <h3>Currently Loaded Names:</h3>
+                        <div id="namesList" style="background-color: #f9f9f9; padding: 15px; border-radius: 4px; min-height: 50px;">
+                            <div class="loading-container">
+                                <div class="spinner"></div>
+                                <p>Loading current names...</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div style="text-align: center; margin-top: 20px;">
+                        <button class="button" onclick="clearAllNames()" style="background-color: #dc3545; width: auto; padding: 10px 20px; margin-right: 10px;">
+                            Clear All Names
+                        </button>
+                        <button class="button" onclick="goBackToMenu()" style="background-color: #6c757d; width: auto; padding: 10px 20px;">
+                            Back to Menu
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            // Load existing names
+            loadCurrentNames();
+        }
+        
         function handleSkipLevel1to1List() {
             console.log('Skip Level 1:1 List button clicked');
             
@@ -179,6 +240,249 @@
         }
         
         
+        function processNameFile() {
+            console.log('Processing name file');
+            const fileInput = document.getElementById('nameFileInput');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                alert('Please select a file first.');
+                return;
+            }
+            
+            if (!file.name.toLowerCase().endsWith('.txt') && !file.name.toLowerCase().endsWith('.text')) {
+                alert('Please select a text file (.txt or .text).');
+                return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const content = e.target.result;
+                const names = content.split('\n')
+                    .map(name => name.trim())
+                    .filter(name => name.length > 0);
+                
+                if (names.length === 0) {
+                    alert('No valid names found in the file.');
+                    return;
+                }
+                
+                console.log('Parsed names:', names);
+                
+                // Show loading state
+                document.getElementById('namesList').innerHTML = `
+                    <div class="loading-container">
+                        <div class="spinner"></div>
+                        <p>Saving ${names.length} names...</p>
+                    </div>
+                `;
+                
+                // Save names to server
+                google.script.run
+                    .withSuccessHandler(function(result) {
+                        console.log('Names saved successfully:', result);
+                        loadCurrentNames();
+                        alert(`Successfully loaded ${names.length} names!`);
+                    })
+                    .withFailureHandler(function(error) {
+                        console.error('Error saving names:', error);
+                        alert('Error saving names: ' + (error.message || error.toString()));
+                        loadCurrentNames();
+                    })
+                    .saveSkipLevelNames(names);
+            };
+            
+            reader.onerror = function() {
+                alert('Error reading file. Please try again.');
+            };
+            
+            reader.readAsText(file);
+        }
+        
+        function loadCurrentNames() {
+            console.log('Loading current names');
+            google.script.run
+                .withSuccessHandler(function(names) {
+                    console.log('Loaded names:', names);
+                    displayCurrentNames(names);
+                })
+                .withFailureHandler(function(error) {
+                    console.error('Error loading names:', error);
+                    document.getElementById('namesList').innerHTML = `
+                        <div style="color: red; text-align: center;">
+                            Error loading names: ${error.message || error.toString()}
+                        </div>
+                    `;
+                })
+                .getSkipLevelNames();
+        }
+        
+        function displayCurrentNames(names) {
+            const namesList = document.getElementById('namesList');
+            
+            if (!names || names.length === 0) {
+                namesList.innerHTML = `
+                    <div style="color: #666; text-align: center; font-style: italic;">
+                        No names currently loaded. Upload a text file to get started.
+                    </div>
+                `;
+            } else {
+                const namesHtml = names.map((name, index) => `
+                    <div style="display: inline-block; background-color: #e3f2fd; color: #1976d2; padding: 5px 10px; margin: 3px; border-radius: 15px; font-size: 14px;">
+                        ${escapeHtml(name)}
+                    </div>
+                `).join('');
+                
+                namesList.innerHTML = `
+                    <div style="margin-bottom: 10px; font-weight: bold; color: #333;">
+                        ${names.length} name(s) loaded:
+                    </div>
+                    <div style="line-height: 1.5;">
+                        ${namesHtml}
+                    </div>
+                `;
+            }
+        }
+        
+        function clearAllNames() {
+            if (!confirm('Are you sure you want to clear all loaded names? This action cannot be undone.')) {
+                return;
+            }
+            
+            console.log('Clearing all names');
+            
+            // Show loading state
+            document.getElementById('namesList').innerHTML = `
+                <div class="loading-container">
+                    <div class="spinner"></div>
+                    <p>Clearing all names...</p>
+                </div>
+            `;
+            
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    console.log('Names cleared successfully');
+                    loadCurrentNames();
+                    alert('All names have been cleared.');
+                })
+                .withFailureHandler(function(error) {
+                    console.error('Error clearing names:', error);
+                    alert('Error clearing names: ' + (error.message || error.toString()));
+                    loadCurrentNames();
+                })
+                .clearSkipLevelNames();
+        }
+        
+        function handleCheckMissingSkipLevels() {
+            console.log('Check missing Skip Levels button clicked');
+            
+            // Check if google.script.run is available
+            if (typeof google === 'undefined' || typeof google.script === 'undefined') {
+                alert('Error: Google Apps Script not available. Make sure this is running as a deployed web app.');
+                console.error('google.script.run not available');
+                return;
+            }
+            
+            // Show loading message
+            const container = document.querySelector('.container');
+            container.style.maxWidth = '800px';
+            container.innerHTML = `
+                <h1>Check missing Skip Levels</h1>
+                <div class="loading-container">
+                    <div class="spinner"></div>
+                    <p>Checking for missing skip levels...</p>
+                </div>
+                <div style="text-align: center; margin-top: 20px;">
+                    <button class="button" onclick="goBackToMenu()" style="background-color: #6c757d; width: auto; padding: 10px 20px;">Back to Menu</button>
+                </div>
+                <div id="resultsContainer" style="margin-top: 30px; display: none;">
+                    <h2>Results</h2>
+                    <div id="resultsList"></div>
+                </div>
+            `;
+            
+            console.log('Calling checkMissingSkipLevels');
+            google.script.run
+                .withSuccessHandler(displayMissingSkipLevelsResults)
+                .withFailureHandler(function(error) {
+                    console.error('Error checking missing skip levels:', error);
+                    document.querySelector('.loading-container').style.display = 'none';
+                    document.getElementById('resultsContainer').innerHTML = `
+                        <div style="text-align: center; color: red; padding: 20px;">
+                            <strong>Error:</strong> ${error.message || error.toString()}
+                        </div>
+                    `;
+                    document.getElementById('resultsContainer').style.display = 'block';
+                })
+                .checkMissingSkipLevels();
+        }
+        
+        function displayMissingSkipLevelsResults(results) {
+            console.log('Received missing skip levels results:', results);
+            
+            // Hide loading spinner
+            document.querySelector('.loading-container').style.display = 'none';
+            
+            const resultsContainer = document.getElementById('resultsContainer');
+            const resultsList = document.getElementById('resultsList');
+            
+            if (!results || !Array.isArray(results)) {
+                resultsList.innerHTML = '<div style="text-align: center; color: red;">Error: Invalid results data received.</div>';
+                resultsContainer.style.display = 'block';
+                return;
+            }
+            
+            if (results.length === 0) {
+                resultsList.innerHTML = '<div style="text-align: center; color: #666;">No names found. Please load skip level names first.</div>';
+            } else {
+                const foundCount = results.filter(result => result.found).length;
+                const missingCount = results.length - foundCount;
+                
+                let html = `
+                    <div style="margin-bottom: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 4px; border-left: 4px solid #4285f4;">
+                        <h3 style="margin: 0 0 10px 0; color: #333;">Summary</h3>
+                        <div style="color: #666;">
+                            <div><strong>Total names:</strong> ${results.length}</div>
+                            <div style="color: #28a745;"><strong>Found with calendar events:</strong> ${foundCount}</div>
+                            <div style="color: #dc3545;"><strong>Missing calendar events:</strong> ${missingCount}</div>
+                        </div>
+                    </div>
+                `;
+                
+                results.forEach((result, index) => {
+                    const icon = result.found ? 
+                        '<span style="color: #28a745; font-size: 18px; margin-right: 8px;">✓</span>' : 
+                        '<span style="color: #dc3545; font-size: 18px; margin-right: 8px;">✗</span>';
+                    
+                    const statusColor = result.found ? '#d4edda' : '#f8d7da';
+                    const borderColor = result.found ? '#28a745' : '#dc3545';
+                    let statusText;
+                    if (result.found) {
+                        const nextOccurrence = result.events && result.events.length > 0 ? 
+                            result.events[0].nextOccurrence : 'Unknown';
+                        statusText = `Recurring calendar events were found - Next occurrence: ${nextOccurrence}`;
+                    } else {
+                        statusText = 'No recurring calendar event found';
+                    }
+                    
+                    html += `
+                        <div style="border: 1px solid ${borderColor}; border-radius: 4px; padding: 15px; margin-bottom: 10px; background-color: ${statusColor};">
+                            <div style="font-weight: bold; color: #333; margin-bottom: 8px; display: flex; align-items: center;">
+                                ${icon}${escapeHtml(result.name)}
+                            </div>
+                            <div style="color: #666; font-size: 14px;">
+                                ${statusText}
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                resultsList.innerHTML = html;
+            }
+            
+            resultsContainer.style.display = 'block';
+        }
+        
         function goBackToMenu() {
             console.log('Going back to main menu');
             const container = document.querySelector('.container');
@@ -188,6 +492,14 @@
                 
                 <button class="button" onclick="handleSkipLevel1to1List()">
                     Skip Level 1:1 List
+                </button>
+                
+                <button class="button" onclick="handleLoadSkipLevelNames()">
+                    Load Skip Level Names
+                </button>
+                
+                <button class="button" onclick="handleCheckMissingSkipLevels()">
+                    Check missing Skip Levels
                 </button>
             `;
         }
