@@ -244,53 +244,87 @@ function checkMissingSkipLevels() {
     const allEvents = calendar.getEvents(today, oneYearAhead);
     Logger.log('Total events found: ' + allEvents.length);
     
-    // Filter events that contain "Skip Level:" in the title
-    const skipLevelEvents = allEvents.filter(event => {
+    // Pre-process events: group recurring events by series ID and find next occurrence
+    const recurringEventSeries = new Map(); // seriesId -> {title, nextOccurrence}
+    const currentTime = new Date();
+    
+    allEvents.forEach(event => {
       const title = event.getTitle();
-      return title && title.includes('Skip Level:');
+      
+      // Only process events with "Skip Level:" in title
+      if (!title || !title.includes('Skip Level:')) {
+        return;
+      }
+      
+      try {
+        const eventSeries = event.getEventSeries();
+        if (eventSeries) {
+          // This is a recurring event
+          const seriesId = eventSeries.getId();
+          const eventStartTime = event.getStartTime();
+          
+          // Only consider future events for "next occurrence"
+          if (eventStartTime >= currentTime) {
+            if (!recurringEventSeries.has(seriesId)) {
+              // First time seeing this series
+              recurringEventSeries.set(seriesId, {
+                title: title,
+                nextOccurrence: eventStartTime.toLocaleDateString() + ' ' + eventStartTime.toLocaleTimeString(),
+                startTime: eventStartTime
+              });
+            } else {
+              // Check if this is a sooner next occurrence
+              const existingEvent = recurringEventSeries.get(seriesId);
+              if (eventStartTime < existingEvent.startTime) {
+                recurringEventSeries.set(seriesId, {
+                  title: title,
+                  nextOccurrence: eventStartTime.toLocaleDateString() + ' ' + eventStartTime.toLocaleTimeString(),
+                  startTime: eventStartTime
+                });
+              }
+            }
+          }
+        }
+      } catch (error) {
+        // Skip if error getting event series
+      }
     });
     
-    Logger.log('Events with "Skip Level:" in title: ' + skipLevelEvents.length);
+    Logger.log('Found ' + recurringEventSeries.size + ' distinct recurring skip level event series');
     
-    // For each name, check if there's a recurring calendar event
+    // Now check each name against the pre-processed recurring events
     const results = [];
     
     names.forEach(name => {
       Logger.log('Checking for name: "' + name + '"');
       
-      // Find recurring events that contain both "Skip Level:" and the name
-      const matchingEvents = skipLevelEvents.filter(event => {
-        const title = event.getTitle();
-        const hasName = title.includes(name);
-        let isRecurring = false;
-        
-        try {
-          const eventSeries = event.getEventSeries();
-          isRecurring = eventSeries !== null;
-        } catch (error) {
-          // If error getting event series, it's likely a single event
-          isRecurring = false;
-        }
-        
-        Logger.log('Event "' + title + '" - has name: ' + hasName + ', is recurring: ' + isRecurring);
-        return hasName && isRecurring;
-      });
+      let found = false;
+      let nextOccurrence = null;
       
-      const found = matchingEvents.length > 0;
-      Logger.log('Name "' + name + '" - found: ' + found + ' (' + matchingEvents.length + ' matching events)');
+      // Search through the pre-processed recurring events
+      for (const [seriesId, eventData] of recurringEventSeries) {
+        if (eventData.title.includes(name)) {
+          found = true;
+          nextOccurrence = eventData.nextOccurrence;
+          Logger.log('Found match for "' + name + '" in series: ' + eventData.title);
+          break; // We only need to find one match
+        }
+      }
+      
+      Logger.log('Name "' + name + '" - found: ' + found);
       
       results.push({
         name: name,
         found: found,
-        eventCount: matchingEvents.length,
-        events: matchingEvents.map(event => ({
-          title: event.getTitle(),
-          nextOccurrence: event.getStartTime().toLocaleDateString() + ' ' + event.getStartTime().toLocaleTimeString()
-        }))
+        eventCount: found ? 1 : 0,
+        events: found ? [{
+          title: 'Recurring calendar events found',
+          nextOccurrence: nextOccurrence
+        }] : []
       });
     });
     
-    Logger.log('Check results: ' + JSON.stringify(results));
+    Logger.log('Check completed for ' + names.length + ' names');
     return results;
     
   } catch (error) {
