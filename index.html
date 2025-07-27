@@ -207,7 +207,7 @@
                         Save Configuration
                     </button>
                     <button class="button" onclick="goBackToMenu()" style="background-color: #6c757d; width: auto; padding: 12px 30px;">
-                        Cancel
+                        Back to Menu
                     </button>
                 </div>
             `;
@@ -552,12 +552,31 @@
         // Global variable to store meeting slots
         let currentMeetingSlots = [];
         
+        // Global variable to track unsaved changes
+        let hasUnsavedChanges = false;
+        let originalMeetingSlots = [];
+        
+        function markUnsavedChanges() {
+            hasUnsavedChanges = true;
+        }
+        
+        function clearUnsavedChanges() {
+            hasUnsavedChanges = false;
+            originalMeetingSlots = JSON.parse(JSON.stringify(currentMeetingSlots));
+        }
+        
+        function checkForUnsavedChanges() {
+            return JSON.stringify(currentMeetingSlots) !== JSON.stringify(originalMeetingSlots);
+        }
+        
         function loadMeetingSlots() {
             console.log('Loading meeting slots');
             google.script.run
                 .withSuccessHandler(function(slots) {
                     console.log('Loaded meeting slots:', slots);
                     currentMeetingSlots = slots || [];
+                    originalMeetingSlots = JSON.parse(JSON.stringify(currentMeetingSlots));
+                    hasUnsavedChanges = false;
                     displayMeetingSlots();
                 })
                 .withFailureHandler(function(error) {
@@ -635,6 +654,7 @@
             };
             
             currentMeetingSlots.push(newSlot);
+            markUnsavedChanges();
             displayMeetingSlots();
             
             // Clear form
@@ -673,6 +693,7 @@
                 duration: newDuration
             };
             
+            markUnsavedChanges();
             displayMeetingSlots();
         }
         
@@ -682,12 +703,21 @@
             
             if (confirm(`Delete meeting slot: ${slot.dayOfWeek} at ${slot.time} for ${slot.duration} minutes?`)) {
                 currentMeetingSlots.splice(index, 1);
+                markUnsavedChanges();
                 displayMeetingSlots();
             }
         }
         
         function saveConfiguration() {
             console.log('Saving configuration');
+            
+            // Check for unsaved changes and show warning
+            if (checkForUnsavedChanges()) {
+                const confirmSave = confirm('You have unsaved changes to your meeting slots. Are you sure you want to save these changes?');
+                if (!confirmSave) {
+                    return; // User cancelled the save
+                }
+            }
             
             // Show loading state
             const saveButton = document.querySelector('button[onclick="saveConfiguration()"]');
@@ -701,6 +731,7 @@
                     console.log('Configuration saved successfully:', result);
                     saveButton.textContent = originalText;
                     saveButton.disabled = false;
+                    clearUnsavedChanges(); // Clear the unsaved changes flag
                     alert('Configuration saved successfully!');
                 })
                 .withFailureHandler(function(error) {
