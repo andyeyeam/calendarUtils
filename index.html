@@ -125,21 +125,27 @@
             const container = document.querySelector('.container');
             container.style.maxWidth = '900px';
             container.innerHTML = `
-                <h1>Configure Skip Level App</h1>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h1 style="margin: 0;">Configure Skip Level App</h1>
+                    <button class="button" onclick="goBackToMenu()" style="background-color: #6c757d; width: auto; padding: 10px 20px; margin: 0;">
+                        Back to Menu
+                    </button>
+                </div>
                 
                 <!-- Section 1: Names Configuration -->
                 <div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px; margin-bottom: 30px;">
                     <h2 style="margin-top: 0; color: #333; border-bottom: 2px solid #4285f4; padding-bottom: 10px;">Skip Level Names</h2>
-                    <p style="color: #666; margin-bottom: 20px;">
-                        Upload a text file containing names (one name per line)
-                    </p>
                     
-                    <div style="border: 2px dashed #ccc; border-radius: 8px; padding: 30px; text-align: center; margin-bottom: 20px;">
-                        <input type="file" id="nameFileInput" accept=".txt,.text" style="margin-bottom: 15px;">
-                        <br>
-                        <button class="button" onclick="processNameFile()" style="width: auto; padding: 10px 20px;">
-                            Upload and Process File
-                        </button>
+                    <div style="border: 2px dashed #ccc; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+                        <p style="color: #666; margin: 0 0 15px 0; text-align: center;">
+                            Upload a text file containing names (one name per line)
+                        </p>
+                        <div style="display: flex; align-items: center; gap: 15px;">
+                            <input type="file" id="nameFileInput" accept=".txt,.text" style="flex: 1;">
+                            <button class="button" onclick="processNameFile()" style="width: auto; padding: 10px 20px; margin: 0;">
+                                Upload and Process File
+                            </button>
+                        </div>
                     </div>
                     
                     <div id="currentNames" style="margin-top: 20px;">
@@ -148,6 +154,19 @@
                             <div class="loading-container">
                                 <div class="spinner"></div>
                                 <p>Loading current names...</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; margin-top: 20px;">
+                        <h4 style="margin-top: 0; margin-bottom: 15px;">Add Individual Name:</h4>
+                        <div style="display: flex; gap: 10px; align-items: end;">
+                            <div style="flex: 1;">
+                                <label style="display: block; margin-bottom: 5px; font-weight: bold;">Name:</label>
+                                <input type="text" id="newNameInput" placeholder="Enter name to add" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;" onkeypress="if(event.key==='Enter') addIndividualName()">
+                            </div>
+                            <div>
+                                <button class="button" onclick="addIndividualName()" style="background-color: #28a745; width: auto; padding: 10px 15px; margin: 0;">Add Name</button>
                             </div>
                         </div>
                     </div>
@@ -203,11 +222,8 @@
                 
                 <!-- Action buttons -->
                 <div style="text-align: center; margin-top: 30px;">
-                    <button class="button" onclick="saveConfiguration()" style="background-color: #28a745; width: auto; padding: 12px 30px; margin-right: 15px;">
+                    <button class="button" onclick="saveConfiguration()" style="background-color: #28a745; width: auto; padding: 12px 30px;">
                         Save Configuration
-                    </button>
-                    <button class="button" onclick="goBackToMenu()" style="background-color: #6c757d; width: auto; padding: 12px 30px;">
-                        Back to Menu
                     </button>
                 </div>
             `;
@@ -393,18 +409,36 @@
                     </div>
                 `;
             } else {
-                const namesHtml = names.map((name, index) => `
-                    <div style="display: inline-block; background-color: #e3f2fd; color: #1976d2; padding: 5px 10px; margin: 3px; border-radius: 15px; font-size: 14px;">
-                        ${escapeHtml(name)}
-                    </div>
-                `).join('');
+                // Sort names alphabetically
+                const sortedNames = [...names].sort((a, b) => a.localeCompare(b));
+                
+                // Calculate items per column for roughly equal distribution
+                const itemsPerColumn = Math.ceil(sortedNames.length / 3);
+                
+                // Create three columns
+                const columns = [
+                    sortedNames.slice(0, itemsPerColumn),
+                    sortedNames.slice(itemsPerColumn, itemsPerColumn * 2),
+                    sortedNames.slice(itemsPerColumn * 2)
+                ];
+                
+                const columnsHtml = columns.map(columnNames => {
+                    const columnItemsHtml = columnNames.map(name => `
+                        <div style="display: flex; align-items: center; background-color: #e3f2fd; color: #1976d2; padding: 5px 10px; margin: 3px 0; border-radius: 15px; font-size: 14px;">
+                            <span style="margin-right: 8px; flex: 1;">${escapeHtml(name)}</span>
+                            <button onclick="removeIndividualName('${escapeHtml(name).replace(/'/g, '\\\'')}')" style="background: #f44336; color: white; border: none; border-radius: 50%; width: 20px; height: 20px; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; line-height: 1; flex-shrink: 0;" title="Remove ${escapeHtml(name)}">×</button>
+                        </div>
+                    `).join('');
+                    
+                    return `<div style="flex: 1; padding: 0 5px;">${columnItemsHtml}</div>`;
+                }).join('');
                 
                 namesList.innerHTML = `
-                    <div style="margin-bottom: 10px; font-weight: bold; color: #333;">
-                        ${names.length} name(s) loaded:
+                    <div style="margin-bottom: 15px; font-weight: bold; color: #333;">
+                        ${names.length} name(s) loaded (sorted alphabetically):
                     </div>
-                    <div style="line-height: 1.5;">
-                        ${namesHtml}
+                    <div style="display: flex; gap: 10px; align-items: flex-start;">
+                        ${columnsHtml}
                     </div>
                 `;
             }
@@ -437,6 +471,102 @@
                     loadCurrentNames();
                 })
                 .clearSkipLevelNames();
+        }
+        
+        function removeIndividualName(nameToRemove) {
+            if (!confirm(`Are you sure you want to remove "${nameToRemove}" from the list?`)) {
+                return;
+            }
+            
+            console.log('Removing individual name:', nameToRemove);
+            
+            // Show loading state
+            document.getElementById('namesList').innerHTML = `
+                <div class="loading-container">
+                    <div class="spinner"></div>
+                    <p>Removing "${nameToRemove}"...</p>
+                </div>
+            `;
+            
+            // Get current names, remove the specified one, and save
+            google.script.run
+                .withSuccessHandler(function(currentNames) {
+                    const updatedNames = currentNames.filter(name => name !== nameToRemove);
+                    
+                    google.script.run
+                        .withSuccessHandler(function(result) {
+                            console.log('Name removed successfully');
+                            loadCurrentNames();
+                            alert(`"${nameToRemove}" has been removed.`);
+                        })
+                        .withFailureHandler(function(error) {
+                            console.error('Error saving updated names:', error);
+                            alert('Error removing name: ' + (error.message || error.toString()));
+                            loadCurrentNames();
+                        })
+                        .saveSkipLevelNames(updatedNames);
+                })
+                .withFailureHandler(function(error) {
+                    console.error('Error getting current names:', error);
+                    alert('Error removing name: ' + (error.message || error.toString()));
+                    loadCurrentNames();
+                })
+                .getSkipLevelNames();
+        }
+        
+        function addIndividualName() {
+            const nameInput = document.getElementById('newNameInput');
+            const newName = nameInput.value.trim();
+            
+            if (!newName) {
+                alert('Please enter a name.');
+                return;
+            }
+            
+            console.log('Adding individual name:', newName);
+            
+            // Show loading state for the add section
+            const addButton = document.querySelector('button[onclick="addIndividualName()"]');
+            const originalText = addButton.textContent;
+            addButton.textContent = 'Adding...';
+            addButton.disabled = true;
+            
+            // Get current names, add the new one, and save
+            google.script.run
+                .withSuccessHandler(function(currentNames) {
+                    if (currentNames.includes(newName)) {
+                        alert(`"${newName}" is already in the list.`);
+                        addButton.textContent = originalText;
+                        addButton.disabled = false;
+                        return;
+                    }
+                    
+                    const updatedNames = [...currentNames, newName];
+                    
+                    google.script.run
+                        .withSuccessHandler(function(result) {
+                            console.log('Name added successfully');
+                            addButton.textContent = originalText;
+                            addButton.disabled = false;
+                            nameInput.value = ''; // Clear the input
+                            loadCurrentNames();
+                            alert(`"${newName}" has been added.`);
+                        })
+                        .withFailureHandler(function(error) {
+                            console.error('Error saving updated names:', error);
+                            addButton.textContent = originalText;
+                            addButton.disabled = false;
+                            alert('Error adding name: ' + (error.message || error.toString()));
+                        })
+                        .saveSkipLevelNames(updatedNames);
+                })
+                .withFailureHandler(function(error) {
+                    console.error('Error getting current names:', error);
+                    addButton.textContent = originalText;
+                    addButton.disabled = false;
+                    alert('Error adding name: ' + (error.message || error.toString()));
+                })
+                .getSkipLevelNames();
         }
         
         function handleCheckMissingSkipLevels() {
