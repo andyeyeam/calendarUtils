@@ -76,8 +76,8 @@
     <div class="container">
         <h1>Andy's Calendar Utilities</h1>
         
-        <button class="button config" onclick="handleLoadSkipLevelNames()">
-            Configure Skip Level App
+        <button class="button" onclick="handleRemoveSkipLevel()">
+            Remove a Skip Level
         </button>
         
         <button class="button" onclick="handleSkipLevel1to1List()">
@@ -88,12 +88,12 @@
             Check missing Skip Levels
         </button>
         
-        <button class="button" onclick="handleRemoveSkipLevel()">
-            Remove a Skip Level
-        </button>
-        
         <button class="button" onclick="handleSearchAvailableSlots()">
             Search for Available Slots
+        </button>
+        
+        <button class="button config" onclick="handleLoadSkipLevelNames()">
+            Configure
         </button>
     </div>
 
@@ -1253,8 +1253,8 @@
             container.innerHTML = `
                 <h1>Andy's Calendar Utilities</h1>
                 
-                <button class="button config" onclick="handleLoadSkipLevelNames()">
-                    Configure Skip Level App
+                <button class="button" onclick="handleRemoveSkipLevel()">
+                    Remove a Skip Level
                 </button>
                 
                 <button class="button" onclick="handleSkipLevel1to1List()">
@@ -1265,12 +1265,12 @@
                     Check missing Skip Levels
                 </button>
                 
-                <button class="button" onclick="handleRemoveSkipLevel()">
-                    Remove a Skip Level
-                </button>
-                
                 <button class="button" onclick="handleSearchAvailableSlots()">
                     Search for Available Slots
+                </button>
+                
+                <button class="button config" onclick="handleLoadSkipLevelNames()">
+                    Configure
                 </button>
             `;
         }
