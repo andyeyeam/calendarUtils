@@ -43,6 +43,15 @@
         .button:active {
             background-color: #2851a3;
         }
+        .button.config {
+            background-color: #cd853f;
+        }
+        .button.config:hover {
+            background-color: #b8722c;
+        }
+        .button.config:active {
+            background-color: #a0621f;
+        }
         .spinner {
             border: 4px solid #f3f3f3;
             border-top: 4px solid #4285f4;
@@ -67,12 +76,12 @@
     <div class="container">
         <h1>Andy's Calendar Utilities</h1>
         
-        <button class="button" onclick="handleSkipLevel1to1List()">
-            Skip Level 1:1 List
+        <button class="button config" onclick="handleLoadSkipLevelNames()">
+            Configure Skip Level App
         </button>
         
-        <button class="button" onclick="handleLoadSkipLevelNames()">
-            Load Skip Level Names
+        <button class="button" onclick="handleSkipLevel1to1List()">
+            Skip Level 1:1 List
         </button>
         
         <button class="button" onclick="handleCheckMissingSkipLevels()">
@@ -99,7 +108,7 @@
         
 
         function handleLoadSkipLevelNames() {
-            console.log('Load Skip Level Names button clicked');
+            console.log('Configure Skip Level App button clicked');
             
             // Check if google.script.run is available
             if (typeof google === 'undefined' || typeof google.script === 'undefined') {
@@ -108,13 +117,16 @@
                 return;
             }
             
-            // Show file upload screen
+            // Show configuration screen with two sections
             const container = document.querySelector('.container');
-            container.style.maxWidth = '600px';
+            container.style.maxWidth = '900px';
             container.innerHTML = `
-                <h1>Load Skip Level Names</h1>
-                <div style="margin: 20px 0;">
-                    <p style="color: #666; text-align: center; margin-bottom: 20px;">
+                <h1>Configure Skip Level App</h1>
+                
+                <!-- Section 1: Names Configuration -->
+                <div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px; margin-bottom: 30px;">
+                    <h2 style="margin-top: 0; color: #333; border-bottom: 2px solid #4285f4; padding-bottom: 10px;">Skip Level Names</h2>
+                    <p style="color: #666; margin-bottom: 20px;">
                         Upload a text file containing names (one name per line)
                     </p>
                     
@@ -137,18 +149,68 @@
                     </div>
                     
                     <div style="text-align: center; margin-top: 20px;">
-                        <button class="button" onclick="clearAllNames()" style="background-color: #dc3545; width: auto; padding: 10px 20px; margin-right: 10px;">
+                        <button class="button" onclick="clearAllNames()" style="background-color: #dc3545; width: auto; padding: 10px 20px;">
                             Clear All Names
-                        </button>
-                        <button class="button" onclick="goBackToMenu()" style="background-color: #6c757d; width: auto; padding: 10px 20px;">
-                            Back to Menu
                         </button>
                     </div>
                 </div>
+                
+                <!-- Section 2: Meeting Slots Configuration -->
+                <div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px; margin-bottom: 30px;">
+                    <h2 style="margin-top: 0; color: #333; border-bottom: 2px solid #cd853f; padding-bottom: 10px;">Meeting Slots</h2>
+                    <p style="color: #666; margin-bottom: 20px;">
+                        Configure recurring meeting time slots for skip level meetings
+                    </p>
+                    
+                    <div id="meetingSlotsList" style="margin-bottom: 20px;">
+                        <div class="loading-container">
+                            <div class="spinner"></div>
+                            <p>Loading meeting slots...</p>
+                        </div>
+                    </div>
+                    
+                    <div style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
+                        <h4 style="margin-top: 0;">Add New Meeting Slot:</h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 10px; align-items: end;">
+                            <div>
+                                <label style="display: block; margin-bottom: 5px; font-weight: bold;">Day of Week:</label>
+                                <select id="newSlotDay" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+                                    <option value="Monday">Monday</option>
+                                    <option value="Tuesday">Tuesday</option>
+                                    <option value="Wednesday">Wednesday</option>
+                                    <option value="Thursday">Thursday</option>
+                                    <option value="Friday">Friday</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="display: block; margin-bottom: 5px; font-weight: bold;">Time:</label>
+                                <input type="time" id="newSlotTime" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+                            </div>
+                            <div>
+                                <label style="display: block; margin-bottom: 5px; font-weight: bold;">Duration (mins):</label>
+                                <input type="number" id="newSlotDuration" placeholder="30" min="15" max="480" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+                            </div>
+                            <div>
+                                <button class="button" onclick="addMeetingSlot()" style="width: auto; padding: 10px 15px; margin: 0;">Add</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Action buttons -->
+                <div style="text-align: center; margin-top: 30px;">
+                    <button class="button" onclick="saveConfiguration()" style="background-color: #28a745; width: auto; padding: 12px 30px; margin-right: 15px;">
+                        Save Configuration
+                    </button>
+                    <button class="button" onclick="goBackToMenu()" style="background-color: #6c757d; width: auto; padding: 12px 30px;">
+                        Cancel
+                    </button>
+                </div>
             `;
             
-            // Load existing names
+            // Load existing data
             loadCurrentNames();
+            loadMeetingSlots();
         }
         
         function handleSkipLevel1to1List() {
@@ -483,6 +545,169 @@
             resultsContainer.style.display = 'block';
         }
         
+        // Global variable to store meeting slots
+        let currentMeetingSlots = [];
+        
+        function loadMeetingSlots() {
+            console.log('Loading meeting slots');
+            google.script.run
+                .withSuccessHandler(function(slots) {
+                    console.log('Loaded meeting slots:', slots);
+                    currentMeetingSlots = slots || [];
+                    displayMeetingSlots();
+                })
+                .withFailureHandler(function(error) {
+                    console.error('Error loading meeting slots:', error);
+                    document.getElementById('meetingSlotsList').innerHTML = `
+                        <div style="color: red; text-align: center;">
+                            Error loading meeting slots: ${error.message || error.toString()}
+                        </div>
+                    `;
+                })
+                .getMeetingSlots();
+        }
+        
+        function displayMeetingSlots() {
+            const slotsList = document.getElementById('meetingSlotsList');
+            
+            if (currentMeetingSlots.length === 0) {
+                slotsList.innerHTML = `
+                    <div style="color: #666; text-align: center; font-style: italic; padding: 20px; border: 1px dashed #ccc; border-radius: 4px;">
+                        No meeting slots configured. Add your first slot below.
+                    </div>
+                `;
+            } else {
+                let html = `
+                    <div style="margin-bottom: 15px; font-weight: bold; color: #333;">
+                        Configured Meeting Slots (${currentMeetingSlots.length}):
+                    </div>
+                `;
+                
+                currentMeetingSlots.forEach((slot, index) => {
+                    html += `
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr auto auto; gap: 10px; align-items: center; padding: 10px; border: 1px solid #e0e0e0; border-radius: 4px; margin-bottom: 8px; background-color: #fafafa;">
+                            <div>
+                                <strong>Day:</strong> ${escapeHtml(slot.dayOfWeek)}
+                            </div>
+                            <div>
+                                <strong>Time:</strong> ${escapeHtml(slot.time)}
+                            </div>
+                            <div>
+                                <strong>Duration:</strong> ${escapeHtml(slot.duration)} mins
+                            </div>
+                            <div>
+                                <button onclick="editMeetingSlot(${index})" style="background: #ffc107; color: #000; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; font-size: 12px;">Edit</button>
+                            </div>
+                            <div>
+                                <button onclick="deleteMeetingSlot(${index})" style="background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; font-size: 12px;">Delete</button>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                slotsList.innerHTML = html;
+            }
+        }
+        
+        function addMeetingSlot() {
+            const day = document.getElementById('newSlotDay').value;
+            const time = document.getElementById('newSlotTime').value;
+            const duration = document.getElementById('newSlotDuration').value;
+            
+            if (!day || !time || !duration) {
+                alert('Please fill in all fields for the meeting slot.');
+                return;
+            }
+            
+            if (parseInt(duration) < 15 || parseInt(duration) > 480) {
+                alert('Duration must be between 15 and 480 minutes.');
+                return;
+            }
+            
+            const newSlot = {
+                dayOfWeek: day,
+                time: time,
+                duration: duration
+            };
+            
+            currentMeetingSlots.push(newSlot);
+            displayMeetingSlots();
+            
+            // Clear form
+            document.getElementById('newSlotTime').value = '';
+            document.getElementById('newSlotDuration').value = '';
+        }
+        
+        function editMeetingSlot(index) {
+            const slot = currentMeetingSlots[index];
+            if (!slot) return;
+            
+            const newDay = prompt('Day of Week:', slot.dayOfWeek);
+            if (newDay === null) return; // User cancelled
+            
+            const newTime = prompt('Time (HH:MM format):', slot.time);
+            if (newTime === null) return; // User cancelled
+            
+            const newDuration = prompt('Duration (minutes):', slot.duration);
+            if (newDuration === null) return; // User cancelled
+            
+            // Validate inputs
+            if (!newDay || !newTime || !newDuration) {
+                alert('All fields are required.');
+                return;
+            }
+            
+            if (parseInt(newDuration) < 15 || parseInt(newDuration) > 480) {
+                alert('Duration must be between 15 and 480 minutes.');
+                return;
+            }
+            
+            // Update the slot
+            currentMeetingSlots[index] = {
+                dayOfWeek: newDay,
+                time: newTime,
+                duration: newDuration
+            };
+            
+            displayMeetingSlots();
+        }
+        
+        function deleteMeetingSlot(index) {
+            const slot = currentMeetingSlots[index];
+            if (!slot) return;
+            
+            if (confirm(`Delete meeting slot: ${slot.dayOfWeek} at ${slot.time} for ${slot.duration} minutes?`)) {
+                currentMeetingSlots.splice(index, 1);
+                displayMeetingSlots();
+            }
+        }
+        
+        function saveConfiguration() {
+            console.log('Saving configuration');
+            
+            // Show loading state
+            const saveButton = document.querySelector('button[onclick="saveConfiguration()"]');
+            const originalText = saveButton.textContent;
+            saveButton.textContent = 'Saving...';
+            saveButton.disabled = true;
+            
+            // Save meeting slots
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    console.log('Configuration saved successfully:', result);
+                    saveButton.textContent = originalText;
+                    saveButton.disabled = false;
+                    alert('Configuration saved successfully!');
+                })
+                .withFailureHandler(function(error) {
+                    console.error('Error saving configuration:', error);
+                    saveButton.textContent = originalText;
+                    saveButton.disabled = false;
+                    alert('Error saving configuration: ' + (error.message || error.toString()));
+                })
+                .saveMeetingSlots(currentMeetingSlots);
+        }
+        
         function goBackToMenu() {
             console.log('Going back to main menu');
             const container = document.querySelector('.container');
@@ -490,12 +715,12 @@
             container.innerHTML = `
                 <h1>Andy's Calendar Utilities</h1>
                 
-                <button class="button" onclick="handleSkipLevel1to1List()">
-                    Skip Level 1:1 List
+                <button class="button config" onclick="handleLoadSkipLevelNames()">
+                    Configure Skip Level App
                 </button>
                 
-                <button class="button" onclick="handleLoadSkipLevelNames()">
-                    Load Skip Level Names
+                <button class="button" onclick="handleSkipLevel1to1List()">
+                    Skip Level 1:1 List
                 </button>
                 
                 <button class="button" onclick="handleCheckMissingSkipLevels()">

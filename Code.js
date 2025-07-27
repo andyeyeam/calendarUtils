@@ -220,6 +220,81 @@ function clearSkipLevelNames() {
   }
 }
 
+function saveMeetingSlots(meetingSlots) {
+  Logger.log('Saving meeting slots: ' + JSON.stringify(meetingSlots));
+  
+  try {
+    if (!Array.isArray(meetingSlots)) {
+      throw new Error('Meeting slots must be provided as an array');
+    }
+    
+    // Validate each meeting slot
+    const validSlots = meetingSlots.map(slot => {
+      if (!slot.dayOfWeek || !slot.time || !slot.duration) {
+        throw new Error('Each meeting slot must have dayOfWeek, time, and duration');
+      }
+      return {
+        dayOfWeek: String(slot.dayOfWeek).trim(),
+        time: String(slot.time).trim(),
+        duration: String(slot.duration).trim()
+      };
+    });
+    
+    // Save to PropertiesService for persistence
+    const properties = PropertiesService.getScriptProperties();
+    properties.setProperty('MEETING_SLOTS', JSON.stringify(validSlots));
+    
+    Logger.log('Successfully saved ' + validSlots.length + ' meeting slots');
+    return {
+      success: true,
+      count: validSlots.length,
+      slots: validSlots
+    };
+    
+  } catch (error) {
+    Logger.log('Error in saveMeetingSlots: ' + error.toString());
+    throw new Error('Failed to save meeting slots: ' + error.message);
+  }
+}
+
+function getMeetingSlots() {
+  Logger.log('Getting meeting slots');
+  
+  try {
+    const properties = PropertiesService.getScriptProperties();
+    const savedSlots = properties.getProperty('MEETING_SLOTS');
+    
+    if (!savedSlots) {
+      Logger.log('No saved meeting slots found');
+      return [];
+    }
+    
+    const slots = JSON.parse(savedSlots);
+    Logger.log('Retrieved ' + slots.length + ' meeting slots: ' + JSON.stringify(slots));
+    return slots;
+    
+  } catch (error) {
+    Logger.log('Error in getMeetingSlots: ' + error.toString());
+    throw new Error('Failed to retrieve meeting slots: ' + error.message);
+  }
+}
+
+function clearMeetingSlots() {
+  Logger.log('Clearing meeting slots');
+  
+  try {
+    const properties = PropertiesService.getScriptProperties();
+    properties.deleteProperty('MEETING_SLOTS');
+    
+    Logger.log('Successfully cleared meeting slots');
+    return { success: true };
+    
+  } catch (error) {
+    Logger.log('Error in clearMeetingSlots: ' + error.toString());
+    throw new Error('Failed to clear meeting slots: ' + error.message);
+  }
+}
+
 function checkMissingSkipLevels() {
   Logger.log('Checking missing skip levels');
   
