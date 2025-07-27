@@ -91,6 +91,10 @@
         <button class="button" onclick="handleRemoveSkipLevel()">
             Remove a Skip Level
         </button>
+        
+        <button class="button" onclick="handleSearchAvailableSlots()">
+            Search for Available Slots
+        </button>
     </div>
 
     <script>
@@ -645,7 +649,10 @@
                     </div>
                 `;
                 
-                results.forEach((result, index) => {
+                // Sort results alphabetically by name
+                const sortedResults = results.sort((a, b) => a.name.localeCompare(b.name));
+                
+                sortedResults.forEach((result, index) => {
                     const icon = result.found ? 
                         '<span style="color: #28a745; font-size: 18px; margin-right: 8px;">✓</span>' : 
                         '<span style="color: #dc3545; font-size: 18px; margin-right: 8px;">✗</span>';
@@ -873,6 +880,220 @@
                 .saveMeetingSlots(currentMeetingSlots);
         }
         
+        function handleSearchAvailableSlots() {
+            console.log('Search for Available Slots button clicked');
+            
+            // Check if google.script.run is available
+            if (typeof google === 'undefined' || typeof google.script === 'undefined') {
+                alert('Error: Google Apps Script not available. Make sure this is running as a deployed web app.');
+                console.error('google.script.run not available');
+                return;
+            }
+            
+            // Show the dedicated search page
+            const container = document.querySelector('.container');
+            container.style.maxWidth = '1000px';
+            container.innerHTML = `
+                <h1>Search for Available Slots</h1>
+                
+                <div class="loading-container">
+                    <div class="spinner"></div>
+                    <p>Loading meeting slots and calculating search parameters...</p>
+                </div>
+                
+                <div style="text-align: center; margin-top: 20px;">
+                    <button class="button" onclick="goBackToMenu()" style="background-color: #6c757d; width: auto; padding: 10px 20px;">
+                        Return to Menu
+                    </button>
+                </div>
+                
+                <div id="searchResults" style="margin-top: 30px; display: none;">
+                    <div id="searchResultsContent"></div>
+                </div>
+            `;
+            
+            // Load meeting slots and names to proceed with search
+            google.script.run
+                .withSuccessHandler(function(slots) {
+                    if (!slots || slots.length === 0) {
+                        document.querySelector('.loading-container').style.display = 'none';
+                        document.getElementById('searchResults').innerHTML = `
+                            <div style="text-align: center; color: #dc3545; padding: 20px; background-color: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px;">
+                                <strong>No Meeting Slots Configured</strong>
+                                <p style="margin: 10px 0 0 0;">Please configure meeting slots first in the "Configure Skip Level App" section.</p>
+                            </div>
+                        `;
+                        document.getElementById('searchResults').style.display = 'block';
+                        return;
+                    }
+                    
+                    // Get names to calculate search period
+                    google.script.run
+                        .withSuccessHandler(function(names) {
+                            const numNames = names ? names.length : 0;
+                            const numSlots = slots.length;
+                            const searchWeeks = Math.max(12, Math.ceil(numNames / numSlots));
+                            
+                            // Update loading message with parameters
+                            document.querySelector('.loading-container').innerHTML = `
+                                <div class="spinner"></div>
+                                <p>Searching for available time slots...</p>
+                                <div style="background-color: #e3f2fd; padding: 15px; border-radius: 8px; margin-top: 20px;">
+                                    <h3 style="margin-top: 0; color: #1976d2;">Search Parameters</h3>
+                                    <p style="margin: 5px 0; color: #666;">
+                                        <strong>Names loaded:</strong> ${numNames}<br>
+                                        <strong>Meeting slots configured:</strong> ${numSlots}<br>
+                                        <strong>Search period:</strong> ${searchWeeks} weeks from today
+                                    </p>
+                                </div>
+                            `;
+                            
+                            // Call backend to search for availability
+                            google.script.run
+                                .withSuccessHandler(displaySearchResults)
+                                .withFailureHandler(function(error) {
+                                    console.error('Error searching for availability:', error);
+                                    document.querySelector('.loading-container').style.display = 'none';
+                                    document.getElementById('searchResults').innerHTML = `
+                                        <div style="text-align: center; color: red; padding: 20px;">
+                                            <strong>Error:</strong> ${error.message || error.toString()}
+                                        </div>
+                                    `;
+                                    document.getElementById('searchResults').style.display = 'block';
+                                })
+                                .searchSlotAvailability(slots, searchWeeks);
+                        })
+                        .withFailureHandler(function(error) {
+                            console.error('Error getting names for search calculation:', error);
+                            document.querySelector('.loading-container').style.display = 'none';
+                            document.getElementById('searchResults').innerHTML = `
+                                <div style="text-align: center; color: red; padding: 20px;">
+                                    <strong>Error:</strong> Failed to load names for search calculation: ${error.message || error.toString()}
+                                </div>
+                            `;
+                            document.getElementById('searchResults').style.display = 'block';
+                        })
+                        .getSkipLevelNames();
+                })
+                .withFailureHandler(function(error) {
+                    console.error('Error loading meeting slots:', error);
+                    document.querySelector('.loading-container').style.display = 'none';
+                    document.getElementById('searchResults').innerHTML = `
+                        <div style="text-align: center; color: red; padding: 20px;">
+                            <strong>Error:</strong> Failed to load meeting slots: ${error.message || error.toString()}
+                        </div>
+                    `;
+                    document.getElementById('searchResults').style.display = 'block';
+                })
+                .getMeetingSlots();
+        }
+        
+        function displaySearchResults(results) {
+            console.log('Received search results:', results);
+            
+            // Hide loading spinner
+            document.querySelector('.loading-container').style.display = 'none';
+            
+            const resultsContainer = document.getElementById('searchResults');
+            const resultsContent = document.getElementById('searchResultsContent');
+            
+            if (!results || !Array.isArray(results)) {
+                resultsContent.innerHTML = '<div style="text-align: center; color: red;">Error: Invalid availability data received.</div>';
+                resultsContainer.style.display = 'block';
+                return;
+            }
+            
+            if (results.length === 0) {
+                resultsContent.innerHTML = `
+                    <div style="text-align: center; color: #666; padding: 30px; background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px;">
+                        <h3>No Available Time Slots Found</h3>
+                        <p>No available time slots were found in the search period. This could mean:</p>
+                        <ul style="text-align: left; display: inline-block; margin: 15px 0;">
+                            <li>All configured time slots are already booked</li>
+                            <li>The search period may need to be extended</li>
+                            <li>You may need to configure additional meeting slots</li>
+                        </ul>
+                    </div>
+                `;
+            } else {
+                // Group results by day of week
+                const groupedResults = {};
+                results.forEach(slot => {
+                    if (!groupedResults[slot.dayOfWeek]) {
+                        groupedResults[slot.dayOfWeek] = [];
+                    }
+                    groupedResults[slot.dayOfWeek].push(slot);
+                });
+                
+                let html = `
+                    <div style="margin-bottom: 25px; padding: 20px; background-color: #d4edda; border: 1px solid #c3e6cb; border-radius: 8px; text-align: center;">
+                        <h2 style="margin: 0 0 10px 0; color: #155724;">Found ${results.length} Available Time Slots</h2>
+                        <p style="margin: 0; color: #155724; font-size: 16px;">These slots are free and available for Skip Level 1:1 meetings.</p>
+                    </div>
+                `;
+                
+                // Sort days in weekly order
+                const dayOrder = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+                const sortedDays = Object.keys(groupedResults).sort((a, b) => dayOrder.indexOf(a) - dayOrder.indexOf(b));
+                
+                sortedDays.forEach(day => {
+                    const daySlots = groupedResults[day].sort((a, b) => new Date(a.date) - new Date(b.date));
+                    
+                    html += `
+                        <div style="margin-bottom: 30px; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                            <div style="background-color: #4285f4; color: white; padding: 15px;">
+                                <h3 style="margin: 0; font-size: 18px;">${day}s</h3>
+                                <p style="margin: 5px 0 0 0; opacity: 0.9;">${daySlots.length} available slot${daySlots.length !== 1 ? 's' : ''}</p>
+                            </div>
+                            <div style="padding: 0;">
+                    `;
+                    
+                    daySlots.forEach((slot, index) => {
+                        const slotDate = new Date(slot.date);
+                        const formattedDate = slotDate.toLocaleDateString('en-US', { 
+                            weekday: 'long', 
+                            year: 'numeric', 
+                            month: 'long', 
+                            day: 'numeric' 
+                        });
+                        
+                        const backgroundColor = index % 2 === 0 ? '#fafafa' : '#ffffff';
+                        
+                        html += `
+                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; background-color: ${backgroundColor}; border-bottom: ${index < daySlots.length - 1 ? '1px solid #e0e0e0' : 'none'};">
+                                <div style="flex: 1;">
+                                    <div style="font-weight: bold; color: #333; margin-bottom: 3px;">${formattedDate}</div>
+                                    <div style="color: #666;">
+                                        <span style="font-weight: 500;">${slot.time}</span> 
+                                        <span style="margin: 0 8px;">•</span>
+                                        <span>${slot.duration} minutes</span>
+                                    </div>
+                                </div>
+                                <div style="text-align: right;">
+                                    <span style="background-color: #28a745; color: white; padding: 6px 12px; border-radius: 15px; font-size: 12px; font-weight: bold;">
+                                        AVAILABLE
+                                    </span>
+                                    <div style="color: #666; font-size: 14px; margin-top: 5px;">
+                                        Ready for Skip Level 1:1
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    html += `
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                resultsContent.innerHTML = html;
+            }
+            
+            resultsContainer.style.display = 'block';
+        }
+        
+        
         function handleRemoveSkipLevel() {
             console.log('Remove Skip Level button clicked');
             
@@ -1046,6 +1267,10 @@
                 
                 <button class="button" onclick="handleRemoveSkipLevel()">
                     Remove a Skip Level
+                </button>
+                
+                <button class="button" onclick="handleSearchAvailableSlots()">
+                    Search for Available Slots
                 </button>
             `;
         }

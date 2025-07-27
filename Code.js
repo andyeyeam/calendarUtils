@@ -500,3 +500,129 @@ function checkMissingSkipLevels() {
     throw new Error('Failed to check missing skip levels: ' + error.message);
   }
 }
+
+function searchSlotAvailability(meetingSlots, searchWeeks) {
+  Logger.log('Searching for slot availability');
+  Logger.log('Meeting slots: ' + JSON.stringify(meetingSlots));
+  Logger.log('Search weeks: ' + searchWeeks);
+  
+  try {
+    if (!Array.isArray(meetingSlots) || meetingSlots.length === 0) {
+      throw new Error('No meeting slots provided');
+    }
+    
+    if (!searchWeeks || searchWeeks < 1) {
+      throw new Error('Invalid search period');
+    }
+    
+    // Get the default calendar
+    const calendar = CalendarApp.getDefaultCalendar();
+    
+    // Calculate search date range
+    const today = new Date();
+    const endDate = new Date();
+    endDate.setDate(today.getDate() + (searchWeeks * 7));
+    
+    Logger.log('Search range: ' + today.toString() + ' to ' + endDate.toString());
+    
+    // Get all events in the search period to check for conflicts
+    const existingEvents = calendar.getEvents(today, endDate);
+    Logger.log('Found ' + existingEvents.length + ' existing events in search period');
+    
+    const availableSlots = [];
+    
+    // For each meeting slot configuration
+    meetingSlots.forEach(slot => {
+      Logger.log('Processing slot: ' + JSON.stringify(slot));
+      
+      // Get the day of week index (0 = Sunday, 1 = Monday, etc.)
+      const dayMap = {
+        'Sunday': 0, 'Monday': 1, 'Tuesday': 2, 'Wednesday': 3, 
+        'Thursday': 4, 'Friday': 5, 'Saturday': 6
+      };
+      const targetDayOfWeek = dayMap[slot.dayOfWeek];
+      
+      if (targetDayOfWeek === undefined) {
+        Logger.log('Invalid day of week: ' + slot.dayOfWeek);
+        return;
+      }
+      
+      // Parse the time
+      const timeParts = slot.time.split(':');
+      const hour = parseInt(timeParts[0]);
+      const minute = parseInt(timeParts[1]);
+      const duration = parseInt(slot.duration);
+      
+      // Find all occurrences of this day in the search period
+      let currentDate = new Date(today);
+      
+      // Move to the first occurrence of the target day
+      while (currentDate.getDay() !== targetDayOfWeek) {
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+      
+      // Check each occurrence of this day
+      while (currentDate <= endDate) {
+        // Create the start and end times for this potential slot
+        const slotStart = new Date(currentDate);
+        slotStart.setHours(hour, minute, 0, 0);
+        
+        const slotEnd = new Date(slotStart);
+        slotEnd.setMinutes(slotEnd.getMinutes() + duration);
+        
+        // Skip if the slot is in the past
+        if (slotStart <= new Date()) {
+          currentDate.setDate(currentDate.getDate() + 7); // Move to next week
+          continue;
+        }
+        
+        // Check if this slot conflicts with any existing events
+        let hasConflict = false;
+        
+        for (const event of existingEvents) {
+          const eventStart = event.getStartTime();
+          const eventEnd = event.getEndTime();
+          
+          // Check for time overlap
+          if ((slotStart < eventEnd && slotEnd > eventStart)) {
+            hasConflict = true;
+            Logger.log('Conflict found with event: ' + event.getTitle() + ' at ' + eventStart.toString());
+            break;
+          }
+        }
+        
+        // If no conflict, add to available slots
+        if (!hasConflict) {
+          availableSlots.push({
+            dayOfWeek: slot.dayOfWeek,
+            date: currentDate.toISOString().split('T')[0], // YYYY-MM-DD format
+            time: slot.time,
+            duration: slot.duration,
+            startDateTime: slotStart.toISOString(),
+            endDateTime: slotEnd.toISOString()
+          });
+          
+          Logger.log('Available slot found: ' + slot.dayOfWeek + ' ' + currentDate.toDateString() + ' at ' + slot.time);
+        }
+        
+        // Move to next week
+        currentDate.setDate(currentDate.getDate() + 7);
+      }
+    });
+    
+    Logger.log('Found ' + availableSlots.length + ' available slots');
+    
+    // Sort results by date and time
+    availableSlots.sort((a, b) => {
+      const dateA = new Date(a.startDateTime);
+      const dateB = new Date(b.startDateTime);
+      return dateA - dateB;
+    });
+    
+    return availableSlots;
+    
+  } catch (error) {
+    Logger.log('Error in searchSlotAvailability: ' + error.toString());
+    throw new Error('Failed to search for slot availability: ' + error.message);
+  }
+}
