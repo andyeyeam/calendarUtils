@@ -77,7 +77,7 @@
         <h1>Andy's Calendar Utilities</h1>
         
         <button class="button" onclick="handleNames()">
-            Names
+            Skip Levels
         </button>
         
         <button class="button" onclick="handleLoadSkipLevelNames()">
@@ -117,7 +117,8 @@
             return div.innerHTML;
         }
 
-        
+        // Cache for Skip Levels list to avoid redundant searches
+        let cachedNamesWithEvents = null;
 
         function handleNames() {
             console.log('Names button clicked');
@@ -142,7 +143,10 @@
                 
                 <!-- Current Names Section -->
                 <div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px; margin-bottom: 30px;">
-                    <h2 style="margin-top: 0; color: #333; border-bottom: 2px solid #28a745; padding-bottom: 10px;">Current Names</h2>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <h2 style="margin: 0; color: #333; border-bottom: 2px solid #28a745; padding-bottom: 10px;">Current Names</h2>
+                        <button class="button" onclick="refreshCurrentNames()" style="background-color: #17a2b8; white-space: nowrap; padding: 8px 16px; margin: 0; border: none; border-radius: 4px; color: white; cursor: pointer; font-size: 14px; width: 100px; text-align: center;">🔄 Refresh</button>
+                    </div>
                     
                     <div id="namesList" style="background-color: #f9f9f9; padding: 15px; border-radius: 4px; min-height: 50px; margin-bottom: 20px;">
                         <div class="loading-container">
@@ -153,13 +157,13 @@
                     
                     <div style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
                         <h4 style="margin-top: 0; margin-bottom: 15px;">Add Individual Name:</h4>
-                        <div style="display: flex; gap: 10px; align-items: end;">
-                            <div style="flex: 1;">
+                        <div style="display: flex; gap: 12px; align-items: end;">
+                            <div style="flex: 1; min-width: 0;">
                                 <label style="display: block; margin-bottom: 5px; font-weight: bold;">Name:</label>
-                                <input type="text" id="newNameInput" placeholder="Enter name to add" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;" onkeypress="if(event.key==='Enter') addIndividualName()">
+                                <input type="text" id="newNameInput" placeholder="Enter name to add" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;" onkeypress="if(event.key==='Enter') addIndividualName()">
                             </div>
-                            <div>
-                                <button class="button" onclick="addIndividualName()" style="background-color: #28a745; width: auto; padding: 10px 15px; margin: 0;">Add Name</button>
+                            <div style="flex-shrink: 0;">
+                                <button class="button" onclick="addIndividualName()" style="background-color: #28a745; white-space: nowrap; padding: 8px 16px; margin: 0; border: none; border-radius: 4px; color: white; cursor: pointer; font-size: 14px; width: 100px; text-align: center;">Add Name</button>
                             </div>
                         </div>
                     </div>
@@ -189,8 +193,14 @@
                 </div>
             `;
             
-            // Load existing names
-            loadCurrentNames();
+            // Check if we have cached data to avoid redundant searches
+            if (cachedNamesWithEvents !== null) {
+                console.log('Using cached names data');
+                displayCurrentNames(cachedNamesWithEvents);
+            } else {
+                console.log('Loading names for first time');
+                loadCurrentNames();
+            }
         }
         
         function handleLoadSkipLevelNames() {
@@ -447,6 +457,7 @@
                         google.script.run
                             .withSuccessHandler(function(result) {
                                 console.log('Names saved successfully:', result);
+                                cachedNamesWithEvents = null; // Clear cache to force calendar search
                                 loadCurrentNames();
                                 alert(`Successfully added ${newNames.length} new names!`);
                             })
@@ -477,6 +488,15 @@
             google.script.run
                 .withSuccessHandler(function(namesWithEvents) {
                     console.log('Loaded names with calendar events:', namesWithEvents);
+                    console.log('Number of names returned:', namesWithEvents ? namesWithEvents.length : 0);
+                    
+                    // Check if any names have calendar events
+                    if (namesWithEvents && namesWithEvents.length > 0) {
+                        const withEvents = namesWithEvents.filter(n => n.found);
+                        console.log('Names with calendar events:', withEvents.length);
+                    }
+                    
+                    cachedNamesWithEvents = namesWithEvents; // Cache the data
                     displayCurrentNames(namesWithEvents);
                 })
                 .withFailureHandler(function(error) {
@@ -488,6 +508,21 @@
                     `;
                 })
                 .getNamesWithCalendarEvents();
+        }
+        
+        function refreshCurrentNames() {
+            console.log('Refreshing current names with calendar events');
+            cachedNamesWithEvents = null; // Clear cache to force reload
+            
+            // Show loading state
+            document.getElementById('namesList').innerHTML = `
+                <div class="loading-container">
+                    <div class="spinner"></div>
+                    <p>Refreshing names with calendar data...</p>
+                </div>
+            `;
+            
+            loadCurrentNames();
         }
         
         function displayCurrentNames(namesWithEvents) {
@@ -515,7 +550,7 @@
                     // Determine calendar status display
                     let calendarStatus = '';
                     if (nameData.found && nameData.nextOccurrence) {
-                        calendarStatus = `<a href="${nameData.calendarLink}" target="_blank" style="color: #28a745; text-decoration: none;">${nameData.nextOccurrence}</a>`;
+                        calendarStatus = `<a href="${nameData.calendarLink}" target="_blank" style="color: #007bff; text-decoration: underline;">📅 Next occurrence: ${nameData.nextOccurrence}</a>`;
                     } else {
                         calendarStatus = '<span style="color: #dc3545;">No Skip Level meeting found</span>';
                     }
@@ -529,7 +564,7 @@
                                     <span style="flex: 1;">${calendarStatus}</span>
                                 </div>
                                 <div>
-                                    <button onclick="removeIndividualName('${escapeHtml(nameData.name).replace(/'/g, '\\\'')}')" style="background: #dc3545; color: white; border: none; border-radius: 4px; padding: 4px 8px; font-size: 11px; cursor: pointer;" title="Remove ${escapeHtml(nameData.name)}">
+                                    <button class="remove-name-btn" data-name="${escapeHtml(nameData.name)}" style="background: #dc3545; color: white; border: none; border-radius: 4px; padding: 4px 8px; font-size: 11px; cursor: pointer;" title="Remove ${escapeHtml(nameData.name)}">
                                         Remove
                                     </button>
                                 </div>
@@ -539,6 +574,14 @@
                 });
                 
                 namesList.innerHTML = html;
+                
+                // Add event listeners for remove buttons
+                document.querySelectorAll('.remove-name-btn').forEach(button => {
+                    button.addEventListener('click', function() {
+                        const nameToRemove = this.getAttribute('data-name');
+                        removeIndividualName(nameToRemove);
+                    });
+                });
             }
         }
         
@@ -560,6 +603,7 @@
             google.script.run
                 .withSuccessHandler(function(result) {
                     console.log('Names cleared successfully');
+                    cachedNamesWithEvents = null; // Clear cache
                     loadCurrentNames();
                     alert('All names have been cleared.');
                 })
@@ -572,44 +616,142 @@
         }
         
         function removeIndividualName(nameToRemove) {
-            if (!confirm(`Are you sure you want to remove "${nameToRemove}" from the list?`)) {
+            console.log('Removing individual name:', nameToRemove);
+            
+            // Get the current names displayed in the list
+            const namesList = document.getElementById('namesList');
+            const currentNameElements = namesList.querySelectorAll('span[style*="font-weight: bold"]');
+            const currentNamesWithEvents = [];
+            let hasCalendarEvent = false;
+            
+            // Extract current names and their calendar status from the displayed list
+            currentNameElements.forEach(nameElement => {
+                const name = nameElement.textContent.trim();
+                const parentRow = nameElement.closest('div[style*="border: 1px solid"]');
+                const hasCalendarLink = parentRow && parentRow.querySelector('a[style*="color: #28a745"]');
+                
+                if (name === nameToRemove && hasCalendarLink) {
+                    hasCalendarEvent = true;
+                }
+                
+                if (hasCalendarLink) {
+                    // Extract the calendar link and next occurrence
+                    const linkElement = parentRow.querySelector('a[style*="color: #28a745"]');
+                    currentNamesWithEvents.push({
+                        name: name,
+                        found: true,
+                        nextOccurrence: linkElement.textContent,
+                        calendarLink: linkElement.href
+                    });
+                } else {
+                    currentNamesWithEvents.push({
+                        name: name,
+                        found: false,
+                        nextOccurrence: null,
+                        calendarLink: null
+                    });
+                }
+            });
+            
+            // Show immediate warning message
+            let confirmMessage = `⚠️ WARNING ⚠️\n\nThis action will remove "${nameToRemove}" from the names list.`;
+            
+            if (hasCalendarEvent) {
+                // Name has calendar events - warn about calendar deletion
+                confirmMessage = `⚠️ IMPORTANT WARNING ⚠️\n\n` +
+                               `This action will:\n` +
+                               `• Remove "${nameToRemove}" from the names list\n` +
+                               `• DELETE all Skip Level calendar events for "${nameToRemove}"\n` +
+                               `• DELETE all future occurrences of these meetings\n\n` +
+                               `This action CANNOT be undone!\n\n` +
+                               `Are you absolutely sure you want to proceed?`;
+            } else {
+                confirmMessage += `\n\nAre you sure you want to proceed?`;
+            }
+            
+            if (!confirm(confirmMessage)) {
                 return;
             }
             
-            console.log('Removing individual name:', nameToRemove);
-            
-            // Show loading state
-            document.getElementById('namesList').innerHTML = `
-                <div class="loading-container">
-                    <div class="spinner"></div>
-                    <p>Removing "${nameToRemove}"...</p>
-                </div>
-            `;
-            
-            // Get current names, remove the specified one, and save
-            google.script.run
-                .withSuccessHandler(function(currentNames) {
-                    const updatedNames = currentNames.filter(name => name !== nameToRemove);
-                    
-                    google.script.run
-                        .withSuccessHandler(function(result) {
-                            console.log('Name removed successfully');
-                            loadCurrentNames();
-                            alert(`"${nameToRemove}" has been removed.`);
-                        })
-                        .withFailureHandler(function(error) {
-                            console.error('Error saving updated names:', error);
-                            alert('Error removing name: ' + (error.message || error.toString()));
-                            loadCurrentNames();
-                        })
-                        .saveSkipLevelNames(updatedNames);
-                })
-                .withFailureHandler(function(error) {
-                    console.error('Error getting current names:', error);
-                    alert('Error removing name: ' + (error.message || error.toString()));
-                    loadCurrentNames();
-                })
-                .getSkipLevelNames();
+            if (hasCalendarEvent) {
+                // Name has calendar events - use the full removeSkipLevel function
+                document.getElementById('namesList').innerHTML = `
+                    <div class="loading-container">
+                        <div class="spinner"></div>
+                        <p>Removing "${nameToRemove}" and calendar events...</p>
+                    </div>
+                `;
+                
+                google.script.run
+                    .withSuccessHandler(function(result) {
+                        console.log('Name and calendar events removed successfully:', result);
+                        
+                        // Custom success handler to refresh the list and show confirmation
+                        google.script.run
+                            .withSuccessHandler(function(updatedNamesWithEvents) {
+                                console.log('Names list refreshed after removing');
+                                displayCurrentNames(updatedNamesWithEvents);
+                                
+                                // Show detailed success message
+                                let successMessage = `✓ "${nameToRemove}" has been successfully removed from the list.`;
+                                if (result.deletedEventCount > 0) {
+                                    successMessage += `\n\n${result.deletedEventCount} calendar event(s) were also deleted.`;
+                                }
+                                
+                                setTimeout(() => {
+                                    alert(successMessage);
+                                }, 100);
+                            })
+                            .withFailureHandler(function(error) {
+                                console.error('Error refreshing names list:', error);
+                                alert('Name and calendar events were removed but there was an error refreshing the list: ' + (error.message || error.toString()));
+                            })
+                            .getNamesWithCalendarEvents();
+                    })
+                    .withFailureHandler(function(error) {
+                        console.error('Error removing name and calendar events:', error);
+                        alert('Error removing name and calendar events: ' + (error.message || error.toString()));
+                        loadCurrentNames();
+                    })
+                    .removeSkipLevel(nameToRemove);
+            } else {
+                // Name has no calendar events - optimize for local removal
+                document.getElementById('namesList').innerHTML = `
+                    <div class="loading-container">
+                        <div class="spinner"></div>
+                        <p>Removing "${nameToRemove}" from list...</p>
+                    </div>
+                `;
+                
+                // Remove the name from the local list
+                const updatedNamesWithEvents = currentNamesWithEvents.filter(nameData => nameData.name !== nameToRemove);
+                
+                // Extract just the names for saving
+                const updatedNames = updatedNamesWithEvents.map(nameData => nameData.name);
+                
+                google.script.run
+                    .withSuccessHandler(function(result) {
+                        console.log('Name removed successfully');
+                        
+                        // Update cache with the updated data
+                        cachedNamesWithEvents = updatedNamesWithEvents;
+                        
+                        // Display the updated list locally (this will sort alphabetically)
+                        displayCurrentNames(updatedNamesWithEvents);
+                        
+                        // Show success message
+                        setTimeout(() => {
+                            alert(`✓ "${nameToRemove}" has been successfully removed from the list.`);
+                        }, 100);
+                    })
+                    .withFailureHandler(function(error) {
+                        console.error('Error saving updated names:', error);
+                        // Redisplay the original list from what was shown before
+                        displayCurrentNames(currentNamesWithEvents);
+                        alert('Error removing name: ' + (error.message || error.toString()));
+                    })
+                    .saveSkipLevelNames(updatedNames);
+            }
         }
         
         function addIndividualName() {
@@ -623,48 +765,101 @@
             
             console.log('Adding individual name:', newName);
             
-            // Show loading state for the add section
+            // Get the current names displayed in the list
+            const namesList = document.getElementById('namesList');
+            const currentNameElements = namesList.querySelectorAll('span[style*="font-weight: bold"]');
+            const currentNamesWithEvents = [];
+            
+            // Extract current names and their calendar status from the displayed list
+            currentNameElements.forEach(nameElement => {
+                const name = nameElement.textContent.trim();
+                const parentRow = nameElement.closest('div[style*="border: 1px solid"]');
+                const hasCalendarLink = parentRow && parentRow.querySelector('a[style*="color: #28a745"]');
+                
+                if (hasCalendarLink) {
+                    // Extract the calendar link and next occurrence
+                    const linkElement = parentRow.querySelector('a[style*="color: #28a745"]');
+                    currentNamesWithEvents.push({
+                        name: name,
+                        found: true,
+                        nextOccurrence: linkElement.textContent,
+                        calendarLink: linkElement.href
+                    });
+                } else {
+                    currentNamesWithEvents.push({
+                        name: name,
+                        found: false,
+                        nextOccurrence: null,
+                        calendarLink: null
+                    });
+                }
+            });
+            
+            // Check if name already exists
+            const existingName = currentNamesWithEvents.find(nameData => nameData.name === newName);
+            if (existingName) {
+                alert(`"${newName}" is already in the list.`);
+                return;
+            }
+            
+            // Show brief spinner
+            document.getElementById('namesList').innerHTML = `
+                <div class="loading-container">
+                    <div class="spinner"></div>
+                    <p>Adding "${newName}" to list...</p>
+                </div>
+            `;
+            
+            // Disable the add button and input
             const addButton = document.querySelector('button[onclick="addIndividualName()"]');
             const originalText = addButton.textContent;
             addButton.textContent = 'Adding...';
             addButton.disabled = true;
+            nameInput.disabled = true;
             
-            // Get current names, add the new one, and save
+            // Extract just the names for saving
+            const currentNames = currentNamesWithEvents.map(nameData => nameData.name);
+            const updatedNames = [...currentNames, newName];
+            
             google.script.run
-                .withSuccessHandler(function(currentNames) {
-                    if (currentNames.includes(newName)) {
-                        alert(`"${newName}" is already in the list.`);
-                        addButton.textContent = originalText;
-                        addButton.disabled = false;
-                        return;
-                    }
+                .withSuccessHandler(function(result) {
+                    console.log('Name added successfully');
                     
-                    const updatedNames = [...currentNames, newName];
+                    // Add the new name to the current list without calendar search
+                    const updatedNamesWithEvents = [...currentNamesWithEvents, {
+                        name: newName,
+                        found: false,
+                        nextOccurrence: null,
+                        calendarLink: null
+                    }];
                     
-                    google.script.run
-                        .withSuccessHandler(function(result) {
-                            console.log('Name added successfully');
-                            addButton.textContent = originalText;
-                            addButton.disabled = false;
-                            nameInput.value = ''; // Clear the input
-                            loadCurrentNames();
-                            alert(`"${newName}" has been added.`);
-                        })
-                        .withFailureHandler(function(error) {
-                            console.error('Error saving updated names:', error);
-                            addButton.textContent = originalText;
-                            addButton.disabled = false;
-                            alert('Error adding name: ' + (error.message || error.toString()));
-                        })
-                        .saveSkipLevelNames(updatedNames);
-                })
-                .withFailureHandler(function(error) {
-                    console.error('Error getting current names:', error);
+                    // Update cache with the new data
+                    cachedNamesWithEvents = updatedNamesWithEvents;
+                    
+                    // Display the updated list (this will sort alphabetically)
+                    displayCurrentNames(updatedNamesWithEvents);
+                    
+                    // Reset form and show success message
                     addButton.textContent = originalText;
                     addButton.disabled = false;
+                    nameInput.disabled = false;
+                    nameInput.value = ''; // Clear the input
+                    
+                    // Show success message
+                    setTimeout(() => {
+                        alert(`✓ "${newName}" has been successfully added to the list.`);
+                    }, 100);
+                })
+                .withFailureHandler(function(error) {
+                    console.error('Error saving updated names:', error);
+                    addButton.textContent = originalText;
+                    addButton.disabled = false;
+                    nameInput.disabled = false;
+                    // Redisplay the original list from what was shown before
+                    displayCurrentNames(currentNamesWithEvents);
                     alert('Error adding name: ' + (error.message || error.toString()));
                 })
-                .getSkipLevelNames();
+                .saveSkipLevelNames(updatedNames);
         }
         
         function handleCheckMissingSkipLevels() {
@@ -1358,7 +1553,7 @@
                 <h1>Andy's Calendar Utilities</h1>
                 
                 <button class="button" onclick="handleNames()">
-                    Names
+                    Skip Levels
                 </button>
                 
                 <button class="button" onclick="handleLoadSkipLevelNames()">

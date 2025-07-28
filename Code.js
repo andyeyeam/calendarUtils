@@ -660,6 +660,7 @@ function getNamesWithCalendarEvents() {
     // Get loaded names
     const names = getSkipLevelNames();
     if (names.length === 0) {
+      Logger.log('No names loaded, returning empty array');
       return [];
     }
     
@@ -677,6 +678,17 @@ function getNamesWithCalendarEvents() {
     const allEvents = calendar.getEvents(today, oneYearAhead);
     Logger.log('Total events found: ' + allEvents.length);
     
+    // First, let's see all event titles to debug
+    const skipLevelEvents = allEvents.filter(event => {
+      const title = event.getTitle();
+      return title && title.includes('Skip Level:');
+    });
+    Logger.log('Events with "Skip Level:" in title: ' + skipLevelEvents.length);
+    
+    skipLevelEvents.forEach((event, index) => {
+      Logger.log('Skip Level Event ' + (index + 1) + ': "' + event.getTitle() + '"');
+    });
+    
     // Pre-process events: group recurring events by series ID and find next occurrence
     const recurringEventSeries = new Map(); // seriesId -> {title, nextOccurrence, calendarLink}
     const currentTime = new Date();
@@ -688,6 +700,8 @@ function getNamesWithCalendarEvents() {
       if (!title || !title.includes('Skip Level:')) {
         return;
       }
+      
+      Logger.log('Processing Skip Level event: "' + title + '"');
       
       try {
         const eventSeries = event.getEventSeries();
