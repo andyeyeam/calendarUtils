@@ -458,7 +458,8 @@ function checkMissingSkipLevels() {
               recurringEventSeries.set(seriesId, {
                 title: title,
                 nextOccurrence: eventStartTime.toLocaleDateString() + ' ' + eventStartTime.toLocaleTimeString(),
-                startTime: eventStartTime
+                startTime: eventStartTime,
+                calendarLink: 'https://calendar.google.com/calendar/u/0/r/day/' + eventStartTime.getFullYear() + '/' + (eventStartTime.getMonth() + 1) + '/' + eventStartTime.getDate()
               });
             } else {
               // Check if this is a sooner next occurrence
@@ -467,7 +468,8 @@ function checkMissingSkipLevels() {
                 recurringEventSeries.set(seriesId, {
                   title: title,
                   nextOccurrence: eventStartTime.toLocaleDateString() + ' ' + eventStartTime.toLocaleTimeString(),
-                  startTime: eventStartTime
+                  startTime: eventStartTime,
+                  calendarLink: 'https://calendar.google.com/calendar/u/0/r/day/' + eventStartTime.getFullYear() + '/' + (eventStartTime.getMonth() + 1) + '/' + eventStartTime.getDate()
                 });
               }
             }
@@ -488,12 +490,14 @@ function checkMissingSkipLevels() {
       
       let found = false;
       let nextOccurrence = null;
+      let calendarLink = null;
       
       // Search through the pre-processed recurring events
       for (const [seriesId, eventData] of recurringEventSeries) {
         if (eventData.title.includes(name)) {
           found = true;
           nextOccurrence = eventData.nextOccurrence;
+          calendarLink = eventData.calendarLink;
           Logger.log('Found match for "' + name + '" in series: ' + eventData.title);
           break; // We only need to find one match
         }
@@ -505,6 +509,8 @@ function checkMissingSkipLevels() {
         name: name,
         found: found,
         eventCount: found ? 1 : 0,
+        nextOccurrence: nextOccurrence,
+        calendarLink: calendarLink,
         events: found ? [{
           title: 'Recurring calendar events found',
           nextOccurrence: nextOccurrence
@@ -644,5 +650,119 @@ function searchSlotAvailability(meetingSlots, searchWeeks) {
   } catch (error) {
     Logger.log('Error in searchSlotAvailability: ' + error.toString());
     throw new Error('Failed to search for slot availability: ' + error.message);
+  }
+}
+
+function getNamesWithCalendarEvents() {
+  Logger.log('Getting names with calendar events');
+  
+  try {
+    // Get loaded names
+    const names = getSkipLevelNames();
+    if (names.length === 0) {
+      return [];
+    }
+    
+    Logger.log('Checking calendar events for ' + names.length + ' names: ' + JSON.stringify(names));
+    
+    // Get the default calendar
+    const calendar = CalendarApp.getDefaultCalendar();
+    
+    // Calculate date range - today to one year ahead
+    const today = new Date();
+    const oneYearAhead = new Date();
+    oneYearAhead.setFullYear(today.getFullYear() + 1);
+    
+    // Get all events in the date range
+    const allEvents = calendar.getEvents(today, oneYearAhead);
+    Logger.log('Total events found: ' + allEvents.length);
+    
+    // Pre-process events: group recurring events by series ID and find next occurrence
+    const recurringEventSeries = new Map(); // seriesId -> {title, nextOccurrence, calendarLink}
+    const currentTime = new Date();
+    
+    allEvents.forEach(event => {
+      const title = event.getTitle();
+      
+      // Only process events with "Skip Level:" in title
+      if (!title || !title.includes('Skip Level:')) {
+        return;
+      }
+      
+      try {
+        const eventSeries = event.getEventSeries();
+        if (eventSeries) {
+          // This is a recurring event
+          const seriesId = eventSeries.getId();
+          const eventStartTime = event.getStartTime();
+          
+          // Only consider future events for "next occurrence"
+          if (eventStartTime >= currentTime) {
+            if (!recurringEventSeries.has(seriesId)) {
+              // First time seeing this series
+              recurringEventSeries.set(seriesId, {
+                title: title,
+                nextOccurrence: eventStartTime.toLocaleDateString() + ' ' + eventStartTime.toLocaleTimeString(),
+                startTime: eventStartTime,
+                calendarLink: 'https://calendar.google.com/calendar/u/0/r/day/' + eventStartTime.getFullYear() + '/' + (eventStartTime.getMonth() + 1) + '/' + eventStartTime.getDate()
+              });
+            } else {
+              // Check if this is a sooner next occurrence
+              const existingEvent = recurringEventSeries.get(seriesId);
+              if (eventStartTime < existingEvent.startTime) {
+                recurringEventSeries.set(seriesId, {
+                  title: title,
+                  nextOccurrence: eventStartTime.toLocaleDateString() + ' ' + eventStartTime.toLocaleTimeString(),
+                  startTime: eventStartTime,
+                  calendarLink: 'https://calendar.google.com/calendar/u/0/r/day/' + eventStartTime.getFullYear() + '/' + (eventStartTime.getMonth() + 1) + '/' + eventStartTime.getDate()
+                });
+              }
+            }
+          }
+        }
+      } catch (error) {
+        // Skip if error getting event series
+      }
+    });
+    
+    Logger.log('Found ' + recurringEventSeries.size + ' distinct recurring skip level event series');
+    
+    // Now check each name against the pre-processed recurring events
+    const results = [];
+    
+    names.forEach(name => {
+      Logger.log('Checking for name: "' + name + '"');
+      
+      let found = false;
+      let nextOccurrence = null;
+      let calendarLink = null;
+      
+      // Search through the pre-processed recurring events
+      for (const [seriesId, eventData] of recurringEventSeries) {
+        if (eventData.title.includes(name)) {
+          found = true;
+          nextOccurrence = eventData.nextOccurrence;
+          calendarLink = eventData.calendarLink;
+          Logger.log('Found match for "' + name + '" in series: ' + eventData.title);
+          break; // We only need to find one match
+        }
+      }
+      
+      Logger.log('Name "' + name + '" - found: ' + found);
+      
+      results.push({
+        name: name,
+        found: found,
+        nextOccurrence: nextOccurrence,
+        calendarLink: calendarLink
+      });
+    });
+    
+    Logger.log('Calendar check completed for ' + names.length + ' names');
+    return results;
+    
+  } catch (error) {
+    Logger.log('Error in getNamesWithCalendarEvents: ' + error.toString());
+    throw new Error('Failed to get names with calendar events: ' + error.message);
   }
 }

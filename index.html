@@ -84,12 +84,12 @@
             Meeting slots
         </button>
         
-        <button class="button" onclick="handleRemoveSkipLevel()">
-            Remove a Skip Level
+        <button class="button" onclick="handleSkipLevel1to1List()">
+            Skip Level List
         </button>
         
-        <button class="button" onclick="handleSkipLevel1to1List()">
-            Skip Level 1:1 List
+        <button class="button" onclick="handleRemoveSkipLevel()">
+            Remove a Skip Level
         </button>
         
         <button class="button" onclick="handleCheckMissingSkipLevels()">
@@ -473,65 +473,72 @@
         }
         
         function loadCurrentNames() {
-            console.log('Loading current names');
+            console.log('Loading current names with calendar events');
             google.script.run
-                .withSuccessHandler(function(names) {
-                    console.log('Loaded names:', names);
-                    displayCurrentNames(names);
+                .withSuccessHandler(function(namesWithEvents) {
+                    console.log('Loaded names with calendar events:', namesWithEvents);
+                    displayCurrentNames(namesWithEvents);
                 })
                 .withFailureHandler(function(error) {
-                    console.error('Error loading names:', error);
+                    console.error('Error loading names with calendar events:', error);
                     document.getElementById('namesList').innerHTML = `
                         <div style="color: red; text-align: center;">
                             Error loading names: ${error.message || error.toString()}
                         </div>
                     `;
                 })
-                .getSkipLevelNames();
+                .getNamesWithCalendarEvents();
         }
         
-        function displayCurrentNames(names) {
+        function displayCurrentNames(namesWithEvents) {
             const namesList = document.getElementById('namesList');
             
-            if (!names || names.length === 0) {
+            if (!namesWithEvents || namesWithEvents.length === 0) {
                 namesList.innerHTML = `
                     <div style="color: #666; text-align: center; font-style: italic;">
                         No names currently loaded. Upload a text file to get started.
                     </div>
                 `;
             } else {
-                // Sort names alphabetically
-                const sortedNames = [...names].sort((a, b) => a.localeCompare(b));
+                // Sort names alphabetically by name property
+                const sortedNamesWithEvents = [...namesWithEvents].sort((a, b) => a.name.localeCompare(b.name));
                 
-                // Calculate items per column for roughly equal distribution
-                const itemsPerColumn = Math.ceil(sortedNames.length / 3);
-                
-                // Create three columns
-                const columns = [
-                    sortedNames.slice(0, itemsPerColumn),
-                    sortedNames.slice(itemsPerColumn, itemsPerColumn * 2),
-                    sortedNames.slice(itemsPerColumn * 2)
-                ];
-                
-                const columnsHtml = columns.map(columnNames => {
-                    const columnItemsHtml = columnNames.map(name => `
-                        <div style="display: flex; align-items: center; background-color: #e3f2fd; color: #1976d2; padding: 5px 10px; margin: 3px 0; border-radius: 15px; font-size: 14px;">
-                            <span style="margin-right: 8px; flex: 1;">${escapeHtml(name)}</span>
-                            <button onclick="removeIndividualName('${escapeHtml(name).replace(/'/g, '\\\'')}')" style="background: #f44336; color: white; border: none; border-radius: 50%; width: 20px; height: 20px; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; line-height: 1; flex-shrink: 0;" title="Remove ${escapeHtml(name)}">×</button>
-                        </div>
-                    `).join('');
-                    
-                    return `<div style="flex: 1; padding: 0 5px;">${columnItemsHtml}</div>`;
-                }).join('');
-                
-                namesList.innerHTML = `
+                let html = `
                     <div style="margin-bottom: 15px; font-weight: bold; color: #333;">
-                        ${names.length} name(s) loaded (sorted alphabetically):
-                    </div>
-                    <div style="display: flex; gap: 10px; align-items: flex-start;">
-                        ${columnsHtml}
+                        ${namesWithEvents.length} name(s) loaded (sorted alphabetically):
                     </div>
                 `;
+                
+                sortedNamesWithEvents.forEach((nameData, index) => {
+                    const backgroundColor = index % 2 === 0 ? '#f8f9fa' : '#ffffff';
+                    
+                    // Determine calendar status display
+                    let calendarStatus = '';
+                    if (nameData.found && nameData.nextOccurrence) {
+                        calendarStatus = `<a href="${nameData.calendarLink}" target="_blank" style="color: #28a745; text-decoration: none;">${nameData.nextOccurrence}</a>`;
+                    } else {
+                        calendarStatus = '<span style="color: #dc3545;">No Skip Level meeting found</span>';
+                    }
+                    
+                    html += `
+                        <div style="border: 1px solid #e0e0e0; border-radius: 4px; padding: 8px; margin-bottom: 4px; background-color: ${backgroundColor};">
+                            <div style="display: flex; align-items: center; justify-content: space-between;">
+                                <div style="display: flex; align-items: center; flex: 1;">
+                                    <span style="font-weight: bold; color: #333; margin-right: 10px; min-width: 150px;">${escapeHtml(nameData.name)}</span>
+                                    <span style="margin-right: 10px;">-</span>
+                                    <span style="flex: 1;">${calendarStatus}</span>
+                                </div>
+                                <div>
+                                    <button onclick="removeIndividualName('${escapeHtml(nameData.name).replace(/'/g, '\\\'')}')" style="background: #dc3545; color: white; border: none; border-radius: 4px; padding: 4px 8px; font-size: 11px; cursor: pointer;" title="Remove ${escapeHtml(nameData.name)}">
+                                        Remove
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                namesList.innerHTML = html;
             }
         }
         
@@ -741,27 +748,37 @@
                 
                 sortedResults.forEach((result, index) => {
                     const icon = result.found ? 
-                        '<span style="color: #28a745; font-size: 18px; margin-right: 8px;">✓</span>' : 
-                        '<span style="color: #dc3545; font-size: 18px; margin-right: 8px;">✗</span>';
+                        '<span style="color: #28a745; font-size: 16px; margin-right: 8px;">✓</span>' : 
+                        '<span style="color: #dc3545; font-size: 16px; margin-right: 8px;">✗</span>';
                     
                     const statusColor = result.found ? '#d4edda' : '#f8d7da';
                     const borderColor = result.found ? '#28a745' : '#dc3545';
+                    
                     let statusText;
+                    let calendarLinkHtml = '';
+                    
                     if (result.found) {
-                        const nextOccurrence = result.events && result.events.length > 0 ? 
-                            result.events[0].nextOccurrence : 'Unknown';
-                        statusText = `Recurring calendar events were found - Next occurrence: ${nextOccurrence}`;
+                        const nextOccurrence = result.nextOccurrence || 'Unknown';
+                        statusText = `Found - Next: ${nextOccurrence}`;
+                        
+                        if (result.calendarLink) {
+                            calendarLinkHtml = `<a href="${escapeHtml(result.calendarLink)}" target="_blank" style="color: #4285f4; text-decoration: none; margin-left: 10px; font-size: 12px;">📅 View in Calendar</a>`;
+                        }
                     } else {
-                        statusText = 'No recurring calendar event found';
+                        statusText = 'No calendar event found';
                     }
                     
                     html += `
-                        <div style="border: 1px solid ${borderColor}; border-radius: 4px; padding: 15px; margin-bottom: 10px; background-color: ${statusColor};">
-                            <div style="font-weight: bold; color: #333; margin-bottom: 8px; display: flex; align-items: center;">
-                                ${icon}${escapeHtml(result.name)}
-                            </div>
-                            <div style="color: #666; font-size: 14px;">
-                                ${statusText}
+                        <div style="border: 1px solid ${borderColor}; border-radius: 4px; padding: 12px; margin-bottom: 8px; background-color: ${statusColor};">
+                            <div style="display: flex; align-items: center; justify-content: space-between;">
+                                <div style="display: flex; align-items: center;">
+                                    ${icon}
+                                    <span style="font-weight: bold; color: #333; margin-right: 15px;">${escapeHtml(result.name)}</span>
+                                    <span style="color: #666; font-size: 14px;">${statusText}</span>
+                                </div>
+                                <div>
+                                    ${calendarLinkHtml}
+                                </div>
                             </div>
                         </div>
                     `;
@@ -1348,12 +1365,12 @@
                     Meeting slots
                 </button>
                 
-                <button class="button" onclick="handleRemoveSkipLevel()">
-                    Remove a Skip Level
+                <button class="button" onclick="handleSkipLevel1to1List()">
+                    Skip Level List
                 </button>
                 
-                <button class="button" onclick="handleSkipLevel1to1List()">
-                    Skip Level 1:1 List
+                <button class="button" onclick="handleRemoveSkipLevel()">
+                    Remove a Skip Level
                 </button>
                 
                 <button class="button" onclick="handleCheckMissingSkipLevels()">
