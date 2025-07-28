@@ -76,6 +76,14 @@
     <div class="container">
         <h1>Andy's Calendar Utilities</h1>
         
+        <button class="button" onclick="handleNames()">
+            Names
+        </button>
+        
+        <button class="button" onclick="handleLoadSkipLevelNames()">
+            Meeting slots
+        </button>
+        
         <button class="button" onclick="handleRemoveSkipLevel()">
             Remove a Skip Level
         </button>
@@ -90,10 +98,6 @@
         
         <button class="button" onclick="handleSearchAvailableSlots()">
             Search for Available Slots
-        </button>
-        
-        <button class="button config" onclick="handleLoadSkipLevelNames()">
-            Configure
         </button>
     </div>
 
@@ -115,6 +119,80 @@
 
         
 
+        function handleNames() {
+            console.log('Names button clicked');
+            
+            // Check if google.script.run is available
+            if (typeof google === 'undefined' || typeof google.script === 'undefined') {
+                alert('Error: Google Apps Script not available. Make sure this is running as a deployed web app.');
+                console.error('google.script.run not available');
+                return;
+            }
+            
+            // Show names management screen
+            const container = document.querySelector('.container');
+            container.style.maxWidth = '800px';
+            container.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h1 style="margin: 0;">Manage Skip Level Names</h1>
+                    <button class="button" onclick="goBackToMenu()" style="background-color: #6c757d; width: auto; padding: 10px 20px; margin: 0;">
+                        Back to Menu
+                    </button>
+                </div>
+                
+                <!-- Current Names Section -->
+                <div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px; margin-bottom: 30px;">
+                    <h2 style="margin-top: 0; color: #333; border-bottom: 2px solid #28a745; padding-bottom: 10px;">Current Names</h2>
+                    
+                    <div id="namesList" style="background-color: #f9f9f9; padding: 15px; border-radius: 4px; min-height: 50px; margin-bottom: 20px;">
+                        <div class="loading-container">
+                            <div class="spinner"></div>
+                            <p>Loading current names...</p>
+                        </div>
+                    </div>
+                    
+                    <div style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
+                        <h4 style="margin-top: 0; margin-bottom: 15px;">Add Individual Name:</h4>
+                        <div style="display: flex; gap: 10px; align-items: end;">
+                            <div style="flex: 1;">
+                                <label style="display: block; margin-bottom: 5px; font-weight: bold;">Name:</label>
+                                <input type="text" id="newNameInput" placeholder="Enter name to add" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;" onkeypress="if(event.key==='Enter') addIndividualName()">
+                            </div>
+                            <div>
+                                <button class="button" onclick="addIndividualName()" style="background-color: #28a745; width: auto; padding: 10px 15px; margin: 0;">Add Name</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- File Upload Section -->
+                <div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px; margin-bottom: 30px;">
+                    <h2 style="margin-top: 0; color: #333; border-bottom: 2px solid #4285f4; padding-bottom: 10px;">Upload Names from File</h2>
+                    
+                    <div style="border: 2px dashed #ccc; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+                        <p style="color: #666; margin: 0 0 15px 0; text-align: center;">
+                            Upload a text file containing names (one name per line)
+                        </p>
+                        <div style="display: flex; align-items: center; gap: 15px;">
+                            <input type="file" id="nameFileInput" accept=".txt,.text" style="flex: 1;">
+                            <button class="button" onclick="processNameFile()" style="width: auto; padding: 10px 20px; margin: 0;">
+                                Upload and Process File
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div style="text-align: center;">
+                        <button class="button" onclick="clearAllNames()" style="background-color: #dc3545; width: auto; padding: 10px 20px;">
+                            Clear All Names
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            // Load existing names
+            loadCurrentNames();
+        }
+        
         function handleLoadSkipLevelNames() {
             console.log('Configure Skip Level App button clicked');
             
@@ -130,59 +208,13 @@
             container.style.maxWidth = '900px';
             container.innerHTML = `
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                    <h1 style="margin: 0;">Configure Skip Level App</h1>
+                    <h1 style="margin: 0;">Configure Meeting Slots</h1>
                     <button class="button" onclick="goBackToMenu()" style="background-color: #6c757d; width: auto; padding: 10px 20px; margin: 0;">
                         Back to Menu
                     </button>
                 </div>
                 
-                <!-- Section 1: Names Configuration -->
-                <div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px; margin-bottom: 30px;">
-                    <h2 style="margin-top: 0; color: #333; border-bottom: 2px solid #4285f4; padding-bottom: 10px;">Skip Level Names</h2>
-                    
-                    <div style="border: 2px dashed #ccc; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
-                        <p style="color: #666; margin: 0 0 15px 0; text-align: center;">
-                            Upload a text file containing names (one name per line)
-                        </p>
-                        <div style="display: flex; align-items: center; gap: 15px;">
-                            <input type="file" id="nameFileInput" accept=".txt,.text" style="flex: 1;">
-                            <button class="button" onclick="processNameFile()" style="width: auto; padding: 10px 20px; margin: 0;">
-                                Upload and Process File
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <div id="currentNames" style="margin-top: 20px;">
-                        <h3>Currently Loaded Names:</h3>
-                        <div id="namesList" style="background-color: #f9f9f9; padding: 15px; border-radius: 4px; min-height: 50px;">
-                            <div class="loading-container">
-                                <div class="spinner"></div>
-                                <p>Loading current names...</p>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; margin-top: 20px;">
-                        <h4 style="margin-top: 0; margin-bottom: 15px;">Add Individual Name:</h4>
-                        <div style="display: flex; gap: 10px; align-items: end;">
-                            <div style="flex: 1;">
-                                <label style="display: block; margin-bottom: 5px; font-weight: bold;">Name:</label>
-                                <input type="text" id="newNameInput" placeholder="Enter name to add" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;" onkeypress="if(event.key==='Enter') addIndividualName()">
-                            </div>
-                            <div>
-                                <button class="button" onclick="addIndividualName()" style="background-color: #28a745; width: auto; padding: 10px 15px; margin: 0;">Add Name</button>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div style="text-align: center; margin-top: 20px;">
-                        <button class="button" onclick="clearAllNames()" style="background-color: #dc3545; width: auto; padding: 10px 20px;">
-                            Clear All Names
-                        </button>
-                    </div>
-                </div>
-                
-                <!-- Section 2: Meeting Slots Configuration -->
+                <!-- Meeting Slots Configuration -->
                 <div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px; margin-bottom: 30px;">
                     <h2 style="margin-top: 0; color: #333; border-bottom: 2px solid #cd853f; padding-bottom: 10px;">Meeting Slots</h2>
                     <p style="color: #666; margin-bottom: 20px;">
@@ -233,7 +265,6 @@
             `;
             
             // Load existing data
-            loadCurrentNames();
             loadMeetingSlots();
         }
         
@@ -355,27 +386,83 @@
                 
                 console.log('Parsed names:', names);
                 
+                // Check for duplicates within the file
+                const uniqueNames = [];
+                const duplicatesInFile = [];
+                const seenNames = new Set();
+                
+                names.forEach(name => {
+                    const lowerName = name.toLowerCase();
+                    if (seenNames.has(lowerName)) {
+                        duplicatesInFile.push(name);
+                    } else {
+                        seenNames.add(lowerName);
+                        uniqueNames.push(name);
+                    }
+                });
+                
+                if (duplicatesInFile.length > 0) {
+                    alert(`Error: The file contains duplicate names:\n${duplicatesInFile.join(', ')}\n\nPlease remove duplicates and try again.`);
+                    return;
+                }
+                
                 // Show loading state
                 document.getElementById('namesList').innerHTML = `
                     <div class="loading-container">
                         <div class="spinner"></div>
-                        <p>Saving ${names.length} names...</p>
+                        <p>Checking for duplicates and saving ${uniqueNames.length} names...</p>
                     </div>
                 `;
                 
-                // Save names to server
+                // Get current names to check for duplicates
                 google.script.run
-                    .withSuccessHandler(function(result) {
-                        console.log('Names saved successfully:', result);
-                        loadCurrentNames();
-                        alert(`Successfully loaded ${names.length} names!`);
+                    .withSuccessHandler(function(currentNames) {
+                        const duplicatesWithExisting = [];
+                        const newNames = [];
+                        
+                        uniqueNames.forEach(name => {
+                            if (currentNames.some(existing => existing.toLowerCase() === name.toLowerCase())) {
+                                duplicatesWithExisting.push(name);
+                            } else {
+                                newNames.push(name);
+                            }
+                        });
+                        
+                        if (duplicatesWithExisting.length > 0) {
+                            loadCurrentNames();
+                            alert(`Error: The following names already exist in the list:\n${duplicatesWithExisting.join(', ')}\n\nDuplicate names cannot be added.`);
+                            return;
+                        }
+                        
+                        if (newNames.length === 0) {
+                            loadCurrentNames();
+                            alert('No new names to add - all names in the file already exist.');
+                            return;
+                        }
+                        
+                        // Combine existing names with new names
+                        const allNames = [...currentNames, ...newNames];
+                        
+                        // Save the combined list
+                        google.script.run
+                            .withSuccessHandler(function(result) {
+                                console.log('Names saved successfully:', result);
+                                loadCurrentNames();
+                                alert(`Successfully added ${newNames.length} new names!`);
+                            })
+                            .withFailureHandler(function(error) {
+                                console.error('Error saving names:', error);
+                                alert('Error saving names: ' + (error.message || error.toString()));
+                                loadCurrentNames();
+                            })
+                            .saveSkipLevelNames(allNames);
                     })
                     .withFailureHandler(function(error) {
-                        console.error('Error saving names:', error);
-                        alert('Error saving names: ' + (error.message || error.toString()));
+                        console.error('Error getting current names:', error);
+                        alert('Error checking for duplicates: ' + (error.message || error.toString()));
                         loadCurrentNames();
                     })
-                    .saveSkipLevelNames(names);
+                    .getSkipLevelNames();
             };
             
             reader.onerror = function() {
@@ -1253,6 +1340,14 @@
             container.innerHTML = `
                 <h1>Andy's Calendar Utilities</h1>
                 
+                <button class="button" onclick="handleNames()">
+                    Names
+                </button>
+                
+                <button class="button" onclick="handleLoadSkipLevelNames()">
+                    Meeting slots
+                </button>
+                
                 <button class="button" onclick="handleRemoveSkipLevel()">
                     Remove a Skip Level
                 </button>
@@ -1267,10 +1362,6 @@
                 
                 <button class="button" onclick="handleSearchAvailableSlots()">
                     Search for Available Slots
-                </button>
-                
-                <button class="button config" onclick="handleLoadSkipLevelNames()">
-                    Configure
                 </button>
             `;
         }

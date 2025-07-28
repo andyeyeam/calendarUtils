@@ -165,15 +165,35 @@ function saveSkipLevelNames(names) {
       throw new Error('No valid names provided');
     }
     
+    // Check for duplicates and remove them
+    const uniqueNames = [];
+    const seenNames = new Set();
+    const duplicates = [];
+    
+    cleanNames.forEach(name => {
+      const lowerName = name.toLowerCase();
+      if (seenNames.has(lowerName)) {
+        duplicates.push(name);
+      } else {
+        seenNames.add(lowerName);
+        uniqueNames.push(name);
+      }
+    });
+    
+    if (duplicates.length > 0) {
+      Logger.log('Removed duplicates: ' + JSON.stringify(duplicates));
+    }
+    
     // Save to PropertiesService for persistence
     const properties = PropertiesService.getScriptProperties();
-    properties.setProperty('SKIP_LEVEL_NAMES', JSON.stringify(cleanNames));
+    properties.setProperty('SKIP_LEVEL_NAMES', JSON.stringify(uniqueNames));
     
-    Logger.log('Successfully saved ' + cleanNames.length + ' names');
+    Logger.log('Successfully saved ' + uniqueNames.length + ' unique names');
     return {
       success: true,
-      count: cleanNames.length,
-      names: cleanNames
+      count: uniqueNames.length,
+      names: uniqueNames,
+      duplicatesRemoved: duplicates.length
     };
     
   } catch (error) {
