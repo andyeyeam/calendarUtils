@@ -509,12 +509,17 @@ function checkMissingSkipLevels() {
       
       // Search through the pre-processed recurring events
       for (const [seriesId, eventData] of recurringEventSeries) {
-        if (eventData.title.includes(name)) {
+        Logger.log('Comparing name "' + name + '" with event title: "' + eventData.title + '"');
+        
+        // Check if the event title contains "Skip Level:" and the name
+        if (eventData.title.includes('Skip Level:') && eventData.title.includes(name)) {
           found = true;
           nextOccurrence = eventData.nextOccurrence;
           calendarLink = eventData.calendarLink;
-          Logger.log('Found match for "' + name + '" in series: ' + eventData.title);
+          Logger.log('✓ Found match for "' + name + '" in series: ' + eventData.title);
           break; // We only need to find one match
+        } else {
+          Logger.log('✗ No match for "' + name + '" in title: ' + eventData.title);
         }
       }
       
@@ -684,14 +689,15 @@ function getNamesWithCalendarEvents() {
     // Get the default calendar
     const calendar = CalendarApp.getDefaultCalendar();
     
-    // Calculate date range - today to one year ahead
+    // For recurring events, we need a longer range to ensure we find the series
+    // Use 6 months to balance performance with event discovery
     const today = new Date();
-    const oneYearAhead = new Date();
-    oneYearAhead.setFullYear(today.getFullYear() + 1);
+    const sixMonthsAhead = new Date();
+    sixMonthsAhead.setMonth(today.getMonth() + 6);
     
-    // Get all events in the date range
-    const allEvents = calendar.getEvents(today, oneYearAhead);
-    Logger.log('Total events found: ' + allEvents.length);
+    // Get events in date range
+    const allEvents = calendar.getEvents(today, sixMonthsAhead);
+    Logger.log('Total events found in 6-month range: ' + allEvents.length);
     
     // First, let's see all event titles to debug
     const skipLevelEvents = allEvents.filter(event => {
@@ -768,12 +774,17 @@ function getNamesWithCalendarEvents() {
       
       // Search through the pre-processed recurring events
       for (const [seriesId, eventData] of recurringEventSeries) {
-        if (eventData.title.includes(name)) {
+        Logger.log('Comparing name "' + name + '" with event title: "' + eventData.title + '"');
+        
+        // Check if the event title contains "Skip Level:" and the name
+        if (eventData.title.includes('Skip Level:') && eventData.title.includes(name)) {
           found = true;
           nextOccurrence = eventData.nextOccurrence;
           calendarLink = eventData.calendarLink;
-          Logger.log('Found match for "' + name + '" in series: ' + eventData.title);
+          Logger.log('✓ Found match for "' + name + '" in series: ' + eventData.title);
           break; // We only need to find one match
+        } else {
+          Logger.log('✗ No match for "' + name + '" in title: ' + eventData.title);
         }
       }
       
