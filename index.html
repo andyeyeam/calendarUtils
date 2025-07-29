@@ -221,21 +221,6 @@
             Meeting slots
         </button>
         
-        <button class="button" onclick="handleSkipLevel1to1List()">
-            Skip Level List
-        </button>
-        
-        <button class="button" onclick="handleRemoveSkipLevel()">
-            Remove a Skip Level
-        </button>
-        
-        <button class="button" onclick="handleCheckMissingSkipLevels()">
-            Check missing Skip Levels
-        </button>
-        
-        <button class="button" onclick="handleSearchAvailableSlots()">
-            Search for Available Slots
-        </button>
     </div>
 
     <script>
@@ -430,94 +415,6 @@
             
             // Load existing data
             loadMeetingSlots();
-        }
-        
-        function handleSkipLevel1to1List() {
-            console.log('Skip Level 1:1 List button clicked');
-            
-            // Check if google.script.run is available
-            if (typeof google === 'undefined' || typeof google.script === 'undefined') {
-                alert('Error: Google Apps Script not available. Make sure this is running as a deployed web app.');
-                console.error('google.script.run not available');
-                return;
-            }
-            
-            // Show loading message
-            const container = document.querySelector('.container');
-            container.style.maxWidth = '800px'; // Make wider for event list
-            container.innerHTML = `
-                <h1>Skip Level 1:1 List</h1>
-                <div class="loading-container">
-                    <div class="spinner"></div>
-                    <p>Loading recurring events with "Skip Level:" in title from today to one year ahead...</p>
-                </div>
-                <div style="text-align: center; margin-top: 20px;">
-                    <button class="button secondary" onclick="goBackToMenu()">Back to Menu</button>
-                </div>
-                <div id="eventsContainer" style="margin-top: 30px; display: none;">
-                    <h2>Distinct Recurring Events</h2>
-                    <div id="eventsList"></div>
-                </div>
-            `;
-            
-            console.log('Calling getSkipLevel1to1List');
-            google.script.run
-                .withSuccessHandler(displaySkipLevelEvents)
-                .withFailureHandler(function(error) {
-                    console.error('Error getting skip level events:', error);
-                    // Hide loading spinner
-                    document.querySelector('.loading-container').style.display = 'none';
-                    document.getElementById('eventsContainer').innerHTML = `
-                        <div style="text-align: center; color: red; padding: 20px;">
-                            <strong>Error:</strong> ${error.message || error.toString()}
-                        </div>
-                    `;
-                    document.getElementById('eventsContainer').style.display = 'block';
-                })
-                .getSkipLevel1to1List();
-        }
-        
-        function displaySkipLevelEvents(events) {
-            console.log('Received skip level events:', events);
-            
-            // Hide loading spinner
-            document.querySelector('.loading-container').style.display = 'none';
-            
-            const eventsContainer = document.getElementById('eventsContainer');
-            const eventsList = document.getElementById('eventsList');
-            
-            if (!events || !Array.isArray(events)) {
-                eventsList.innerHTML = '<div style="text-align: center; color: red;">Error: Invalid events data received.</div>';
-                eventsContainer.style.display = 'block';
-                return;
-            }
-            
-            if (events.length === 0) {
-                eventsList.innerHTML = '<div style="text-align: center; color: #666;">No recurring events found with "Skip Level:" in the title.</div>';
-            } else {
-                let html = '';
-                events.forEach((event, index) => {
-                    // All events are now recurring, so we only show the RECURRING badge
-                    const recurringBadge = '<span style="background-color: #4285f4; color: white; padding: 2px 6px; border-radius: 3px; font-size: 12px; margin-left: 10px;">RECURRING</span>';
-                    
-                    html += `
-                        <div style="border: 1px solid #e0e0e0; border-radius: 4px; padding: 15px; margin-bottom: 10px; background-color: #fafafa; word-wrap: break-word; overflow-wrap: break-word;">
-                            <div style="font-weight: bold; color: #333; margin-bottom: 5px; word-wrap: break-word;">
-                                ${escapeHtml(event.title || 'Untitled Event')}${recurringBadge}
-                            </div>
-                            <div style="color: #666; margin-bottom: 5px; word-wrap: break-word;">
-                                <strong>Next Occurrence:</strong> ${escapeHtml(event.nextOccurrence || 'No time specified')}
-                            </div>
-                            ${event.description ? `<div style="color: #555; font-style: italic; word-wrap: break-word; margin-bottom: 5px;"><strong>Description:</strong> ${escapeHtml(event.description)}</div>` : ''}
-                            ${event.htmlLink ? `<div style="margin-bottom: 5px;"><a href="${escapeHtml(event.htmlLink)}" target="_blank" style="color: #4285f4; text-decoration: none;">📅 View Day in Calendar</a></div>` : ''}
-                            <div style="color: #888; font-size: 11px; margin-top: 5px;">Series ID: ${escapeHtml(event.seriesId)}</div>
-                        </div>
-                    `;
-                });
-                eventsList.innerHTML = html;
-            }
-            
-            eventsContainer.style.display = 'block';
         }
         
         
@@ -831,16 +728,65 @@
                 dropdown.classList.remove('show');
             }
             
+            console.log('Adding recurring meeting for:', name);
+            
             // Show confirmation dialog
             const confirmMessage = `Add a recurring meeting for "${name}"?\n\n` +
-                                 `This will create a new recurring calendar event with the title:\n` +
-                                 `"Skip Level: ${name}"\n\n` +
-                                 `Note: You'll need to manually configure the meeting time and frequency in your calendar after creation.`;
+                                 `This will:\n` +
+                                 `• Search for available meeting slots in your calendar\n` +
+                                 `• Create a recurring Skip Level meeting\n` +
+                                 `• Schedule meetings based on configured meeting slots\n\n` +
+                                 `Continue?`;
             
-            if (confirm(confirmMessage)) {
-                alert(`Feature coming soon!\n\nThis will create a recurring calendar event for "${name}".`);
-                // TODO: Implement actual recurring meeting creation
+            if (!confirm(confirmMessage)) {
+                return;
             }
+            
+            // Show loading state
+            document.getElementById('namesList').innerHTML = `
+                <div class="loading-container">
+                    <div class="spinner"></div>
+                    <p>Creating recurring meeting for "${name}"...</p>
+                    <div style="color: #6c757d; font-size: 12px; margin-top: 10px;">
+                        Calculating schedule and checking calendar availability
+                    </div>
+                </div>
+            `;
+            
+            // Call backend to create the recurring meeting
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    console.log('Recurring meeting created successfully:', result);
+                    
+                    // Show success message
+                    let successMessage = `✓ Recurring meeting created successfully for "${name}"!\n\n`;
+                    
+                    if (result.meetingCreated) {
+                        successMessage += `Meeting Details:\n`;
+                        successMessage += `• Day: ${result.meetingDetails.dayOfWeek}\n`;
+                        successMessage += `• Time: ${result.meetingDetails.time}\n`;
+                        successMessage += `• Duration: ${result.meetingDetails.duration} minutes\n`;
+                        successMessage += `• Frequency: Every ${result.weeksCalculated} weeks\n`;
+                        successMessage += `• Title: Skip Level: ${name}`;
+                    } else {
+                        successMessage += `No available slots found in the next ${result.weeksCalculated} weeks.\n`;
+                        successMessage += `Please check your meeting slot configuration or calendar availability.`;
+                    }
+                    
+                    alert(successMessage);
+                    
+                    // Return to current names list and refresh to show updated calendar status
+                    cachedNamesWithEvents = null; // Clear cache to force calendar search
+                    loadCurrentNames();
+                })
+                .withFailureHandler(function(error) {
+                    console.error('Error creating recurring meeting:', error);
+                    alert('Error creating recurring meeting: ' + (error.message || error.toString()));
+                    
+                    // Refresh the names list on error
+                    loadCurrentNames();
+                })
+                .createRecurringMeeting(name);
         }
         
         function clearAllNames() {
@@ -1109,128 +1055,6 @@
                 .saveSkipLevelNames(updatedNames);
         }
         
-        function handleCheckMissingSkipLevels() {
-            console.log('Check missing Skip Levels button clicked');
-            
-            // Check if google.script.run is available
-            if (typeof google === 'undefined' || typeof google.script === 'undefined') {
-                alert('Error: Google Apps Script not available. Make sure this is running as a deployed web app.');
-                console.error('google.script.run not available');
-                return;
-            }
-            
-            // Show loading message
-            const container = document.querySelector('.container');
-            container.style.maxWidth = '800px';
-            container.innerHTML = `
-                <h1>Check missing Skip Levels</h1>
-                <div class="loading-container">
-                    <div class="spinner"></div>
-                    <p>Checking for missing skip levels...</p>
-                </div>
-                <div style="text-align: center; margin-top: 20px;">
-                    <button class="button" onclick="goBackToMenu()" style="background-color: #6c757d; width: auto; padding: 10px 20px;">Back to Menu</button>
-                </div>
-                <div id="resultsContainer" style="margin-top: 30px; display: none;">
-                    <h2>Results</h2>
-                    <div id="resultsList"></div>
-                </div>
-            `;
-            
-            console.log('Calling checkMissingSkipLevels');
-            google.script.run
-                .withSuccessHandler(displayMissingSkipLevelsResults)
-                .withFailureHandler(function(error) {
-                    console.error('Error checking missing skip levels:', error);
-                    document.querySelector('.loading-container').style.display = 'none';
-                    document.getElementById('resultsContainer').innerHTML = `
-                        <div style="text-align: center; color: red; padding: 20px;">
-                            <strong>Error:</strong> ${error.message || error.toString()}
-                        </div>
-                    `;
-                    document.getElementById('resultsContainer').style.display = 'block';
-                })
-                .checkMissingSkipLevels();
-        }
-        
-        function displayMissingSkipLevelsResults(results) {
-            console.log('Received missing skip levels results:', results);
-            
-            // Hide loading spinner
-            document.querySelector('.loading-container').style.display = 'none';
-            
-            const resultsContainer = document.getElementById('resultsContainer');
-            const resultsList = document.getElementById('resultsList');
-            
-            if (!results || !Array.isArray(results)) {
-                resultsList.innerHTML = '<div style="text-align: center; color: red;">Error: Invalid results data received.</div>';
-                resultsContainer.style.display = 'block';
-                return;
-            }
-            
-            if (results.length === 0) {
-                resultsList.innerHTML = '<div style="text-align: center; color: #666;">No names found. Please load skip level names first.</div>';
-            } else {
-                const foundCount = results.filter(result => result.found).length;
-                const missingCount = results.length - foundCount;
-                
-                let html = `
-                    <div style="margin-bottom: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 4px; border-left: 4px solid #4285f4;">
-                        <h3 style="margin: 0 0 10px 0; color: #333;">Summary</h3>
-                        <div style="color: #666;">
-                            <div><strong>Total names:</strong> ${results.length}</div>
-                            <div style="color: #28a745;"><strong>Found with calendar events:</strong> ${foundCount}</div>
-                            <div style="color: #dc3545;"><strong>Missing calendar events:</strong> ${missingCount}</div>
-                        </div>
-                    </div>
-                `;
-                
-                // Sort results alphabetically by name
-                const sortedResults = results.sort((a, b) => a.name.localeCompare(b.name));
-                
-                sortedResults.forEach((result, index) => {
-                    const icon = result.found ? 
-                        '<span style="color: #28a745; font-size: 16px; margin-right: 8px;">✓</span>' : 
-                        '<span style="color: #dc3545; font-size: 16px; margin-right: 8px;">✗</span>';
-                    
-                    const statusColor = result.found ? '#d4edda' : '#f8d7da';
-                    const borderColor = result.found ? '#28a745' : '#dc3545';
-                    
-                    let statusText;
-                    let calendarLinkHtml = '';
-                    
-                    if (result.found) {
-                        const nextOccurrence = result.nextOccurrence || 'Unknown';
-                        statusText = `Found - Next: ${nextOccurrence}`;
-                        
-                        if (result.calendarLink) {
-                            calendarLinkHtml = `<a href="${escapeHtml(result.calendarLink)}" target="_blank" style="color: #4285f4; text-decoration: none; margin-left: 10px; font-size: 12px;">📅 View in Calendar</a>`;
-                        }
-                    } else {
-                        statusText = 'No calendar event found';
-                    }
-                    
-                    html += `
-                        <div style="border: 1px solid ${borderColor}; border-radius: 4px; padding: 12px; margin-bottom: 8px; background-color: ${statusColor};">
-                            <div style="display: flex; align-items: center; justify-content: space-between;">
-                                <div style="display: flex; align-items: center;">
-                                    ${icon}
-                                    <span style="font-weight: bold; color: #333; margin-right: 15px;">${escapeHtml(result.name)}</span>
-                                    <span style="color: #666; font-size: 14px;">${statusText}</span>
-                                </div>
-                                <div>
-                                    ${calendarLinkHtml}
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                });
-                
-                resultsList.innerHTML = html;
-            }
-            
-            resultsContainer.style.display = 'block';
-        }
         
         // Global variable to store meeting slots
         let currentMeetingSlots = [];
@@ -1426,371 +1250,7 @@
                 .saveMeetingSlots(currentMeetingSlots);
         }
         
-        function handleSearchAvailableSlots() {
-            console.log('Search for Available Slots button clicked');
-            
-            // Check if google.script.run is available
-            if (typeof google === 'undefined' || typeof google.script === 'undefined') {
-                alert('Error: Google Apps Script not available. Make sure this is running as a deployed web app.');
-                console.error('google.script.run not available');
-                return;
-            }
-            
-            // Show the dedicated search page
-            const container = document.querySelector('.container');
-            container.style.maxWidth = '1000px';
-            container.innerHTML = `
-                <h1>Search for Available Slots</h1>
-                
-                <div class="loading-container">
-                    <div class="spinner"></div>
-                    <p>Loading meeting slots and calculating search parameters...</p>
-                </div>
-                
-                <div style="text-align: center; margin-top: 20px;">
-                    <button class="button" onclick="goBackToMenu()" style="background-color: #6c757d; width: auto; padding: 10px 20px;">
-                        Return to Menu
-                    </button>
-                </div>
-                
-                <div id="searchResults" style="margin-top: 30px; display: none;">
-                    <div id="searchResultsContent"></div>
-                </div>
-            `;
-            
-            // Load meeting slots and names to proceed with search
-            google.script.run
-                .withSuccessHandler(function(slots) {
-                    if (!slots || slots.length === 0) {
-                        document.querySelector('.loading-container').style.display = 'none';
-                        document.getElementById('searchResults').innerHTML = `
-                            <div style="text-align: center; color: #dc3545; padding: 20px; background-color: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px;">
-                                <strong>No Meeting Slots Configured</strong>
-                                <p style="margin: 10px 0 0 0;">Please configure meeting slots first in the "Configure Skip Level App" section.</p>
-                            </div>
-                        `;
-                        document.getElementById('searchResults').style.display = 'block';
-                        return;
-                    }
-                    
-                    // Get names to calculate search period
-                    google.script.run
-                        .withSuccessHandler(function(names) {
-                            const numNames = names ? names.length : 0;
-                            const numSlots = slots.length;
-                            const searchWeeks = Math.max(12, Math.ceil(numNames / numSlots));
-                            
-                            // Update loading message with parameters
-                            document.querySelector('.loading-container').innerHTML = `
-                                <div class="spinner"></div>
-                                <p>Searching for available time slots...</p>
-                                <div style="background-color: #e3f2fd; padding: 15px; border-radius: 8px; margin-top: 20px;">
-                                    <h3 style="margin-top: 0; color: #1976d2;">Search Parameters</h3>
-                                    <p style="margin: 5px 0; color: #666;">
-                                        <strong>Names loaded:</strong> ${numNames}<br>
-                                        <strong>Meeting slots configured:</strong> ${numSlots}<br>
-                                        <strong>Search period:</strong> ${searchWeeks} weeks from today
-                                    </p>
-                                </div>
-                            `;
-                            
-                            // Call backend to search for availability
-                            google.script.run
-                                .withSuccessHandler(displaySearchResults)
-                                .withFailureHandler(function(error) {
-                                    console.error('Error searching for availability:', error);
-                                    document.querySelector('.loading-container').style.display = 'none';
-                                    document.getElementById('searchResults').innerHTML = `
-                                        <div style="text-align: center; color: red; padding: 20px;">
-                                            <strong>Error:</strong> ${error.message || error.toString()}
-                                        </div>
-                                    `;
-                                    document.getElementById('searchResults').style.display = 'block';
-                                })
-                                .searchSlotAvailability(slots, searchWeeks);
-                        })
-                        .withFailureHandler(function(error) {
-                            console.error('Error getting names for search calculation:', error);
-                            document.querySelector('.loading-container').style.display = 'none';
-                            document.getElementById('searchResults').innerHTML = `
-                                <div style="text-align: center; color: red; padding: 20px;">
-                                    <strong>Error:</strong> Failed to load names for search calculation: ${error.message || error.toString()}
-                                </div>
-                            `;
-                            document.getElementById('searchResults').style.display = 'block';
-                        })
-                        .getSkipLevelNames();
-                })
-                .withFailureHandler(function(error) {
-                    console.error('Error loading meeting slots:', error);
-                    document.querySelector('.loading-container').style.display = 'none';
-                    document.getElementById('searchResults').innerHTML = `
-                        <div style="text-align: center; color: red; padding: 20px;">
-                            <strong>Error:</strong> Failed to load meeting slots: ${error.message || error.toString()}
-                        </div>
-                    `;
-                    document.getElementById('searchResults').style.display = 'block';
-                })
-                .getMeetingSlots();
-        }
         
-        function displaySearchResults(results) {
-            console.log('Received search results:', results);
-            
-            // Hide loading spinner
-            document.querySelector('.loading-container').style.display = 'none';
-            
-            const resultsContainer = document.getElementById('searchResults');
-            const resultsContent = document.getElementById('searchResultsContent');
-            
-            if (!results || !Array.isArray(results)) {
-                resultsContent.innerHTML = '<div style="text-align: center; color: red;">Error: Invalid availability data received.</div>';
-                resultsContainer.style.display = 'block';
-                return;
-            }
-            
-            if (results.length === 0) {
-                resultsContent.innerHTML = `
-                    <div style="text-align: center; color: #666; padding: 30px; background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px;">
-                        <h3>No Available Time Slots Found</h3>
-                        <p>No available time slots were found in the search period. This could mean:</p>
-                        <ul style="text-align: left; display: inline-block; margin: 15px 0;">
-                            <li>All configured time slots are already booked</li>
-                            <li>The search period may need to be extended</li>
-                            <li>You may need to configure additional meeting slots</li>
-                        </ul>
-                    </div>
-                `;
-            } else {
-                // Group results by day of week
-                const groupedResults = {};
-                results.forEach(slot => {
-                    if (!groupedResults[slot.dayOfWeek]) {
-                        groupedResults[slot.dayOfWeek] = [];
-                    }
-                    groupedResults[slot.dayOfWeek].push(slot);
-                });
-                
-                let html = `
-                    <div style="margin-bottom: 25px; padding: 20px; background-color: #d4edda; border: 1px solid #c3e6cb; border-radius: 8px; text-align: center;">
-                        <h2 style="margin: 0 0 10px 0; color: #155724;">Found ${results.length} Available Time Slots</h2>
-                        <p style="margin: 0; color: #155724; font-size: 16px;">These slots are free and available for Skip Level 1:1 meetings.</p>
-                    </div>
-                `;
-                
-                // Sort days in weekly order
-                const dayOrder = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-                const sortedDays = Object.keys(groupedResults).sort((a, b) => dayOrder.indexOf(a) - dayOrder.indexOf(b));
-                
-                sortedDays.forEach(day => {
-                    const daySlots = groupedResults[day].sort((a, b) => new Date(a.date) - new Date(b.date));
-                    
-                    html += `
-                        <div style="margin-bottom: 30px; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                            <div style="background-color: #4285f4; color: white; padding: 15px;">
-                                <h3 style="margin: 0; font-size: 18px;">${day}s</h3>
-                                <p style="margin: 5px 0 0 0; opacity: 0.9;">${daySlots.length} available slot${daySlots.length !== 1 ? 's' : ''}</p>
-                            </div>
-                            <div style="padding: 0;">
-                    `;
-                    
-                    daySlots.forEach((slot, index) => {
-                        const slotDate = new Date(slot.date);
-                        const formattedDate = slotDate.toLocaleDateString('en-US', { 
-                            weekday: 'long', 
-                            year: 'numeric', 
-                            month: 'long', 
-                            day: 'numeric' 
-                        });
-                        
-                        const backgroundColor = index % 2 === 0 ? '#fafafa' : '#ffffff';
-                        
-                        html += `
-                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; background-color: ${backgroundColor}; border-bottom: ${index < daySlots.length - 1 ? '1px solid #e0e0e0' : 'none'};">
-                                <div style="flex: 1;">
-                                    <div style="font-weight: bold; color: #333; margin-bottom: 3px;">${formattedDate}</div>
-                                    <div style="color: #666;">
-                                        <span style="font-weight: 500;">${slot.time}</span> 
-                                        <span style="margin: 0 8px;">•</span>
-                                        <span>${slot.duration} minutes</span>
-                                    </div>
-                                </div>
-                                <div style="text-align: right;">
-                                    <span style="background-color: #28a745; color: white; padding: 6px 12px; border-radius: 15px; font-size: 12px; font-weight: bold;">
-                                        AVAILABLE
-                                    </span>
-                                    <div style="color: #666; font-size: 14px; margin-top: 5px;">
-                                        Ready for Skip Level 1:1
-                                    </div>
-                                </div>
-                            </div>
-                        `;
-                    });
-                    
-                    html += `
-                            </div>
-                        </div>
-                    `;
-                });
-                
-                resultsContent.innerHTML = html;
-            }
-            
-            resultsContainer.style.display = 'block';
-        }
-        
-        
-        function handleRemoveSkipLevel() {
-            console.log('Remove Skip Level button clicked');
-            
-            // Check if google.script.run is available
-            if (typeof google === 'undefined' || typeof google.script === 'undefined') {
-                alert('Error: Google Apps Script not available. Make sure this is running as a deployed web app.');
-                console.error('google.script.run not available');
-                return;
-            }
-            
-            // First, get the list of available names
-            console.log('Getting available names for removal');
-            google.script.run
-                .withSuccessHandler(function(names) {
-                    console.log('Retrieved names for removal:', names);
-                    showRemoveSkipLevelDialog(names);
-                })
-                .withFailureHandler(function(error) {
-                    console.error('Error getting names:', error);
-                    alert('Error loading names: ' + (error.message || error.toString()));
-                })
-                .getSkipLevelNames();
-        }
-        
-        function showRemoveSkipLevelDialog(names) {
-            if (!names || names.length === 0) {
-                alert('No skip level names are currently loaded. Please configure names first.');
-                return;
-            }
-            
-            // Sort names alphabetically
-            const sortedNames = [...names].sort((a, b) => a.localeCompare(b));
-            
-            // Show selection screen
-            const container = document.querySelector('.container');
-            container.style.maxWidth = '600px';
-            container.innerHTML = `
-                <h1>Remove a Skip Level</h1>
-                <div style="margin: 20px 0;">
-                    <p style="color: #666; text-align: center; margin-bottom: 20px;">
-                        Select a name to remove. This will delete the recurring calendar event and remove the name from the app.
-                    </p>
-                    
-                    <div style="background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px; padding: 15px; margin-bottom: 20px;">
-                        <strong style="color: #856404;">⚠️ Warning:</strong>
-                        <div style="color: #856404; margin-top: 5px;">
-                            This action will permanently delete the recurring calendar event and all future occurrences. This cannot be undone.
-                        </div>
-                    </div>
-                    
-                    <div style="margin-bottom: 20px;">
-                        <label style="display: block; margin-bottom: 10px; font-weight: bold;">Select name to remove:</label>
-                        <select id="nameToRemove" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 16px;">
-                            <option value="">-- Select a name --</option>
-                            ${sortedNames.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('')}
-                        </select>
-                    </div>
-                    
-                    <div style="text-align: center; margin-top: 30px;">
-                        <button class="button" onclick="confirmRemoveSkipLevel()" style="background-color: #dc3545; width: auto; padding: 12px 30px; margin-right: 15px;">
-                            Remove Skip Level
-                        </button>
-                        <button class="button" onclick="goBackToMenu()" style="background-color: #6c757d; width: auto; padding: 12px 30px;">
-                            Cancel
-                        </button>
-                    </div>
-                    
-                    <div id="removalResults" style="margin-top: 30px; display: none;">
-                        <h3>Removal Results</h3>
-                        <div id="removalResultsContent"></div>
-                    </div>
-                </div>
-            `;
-        }
-        
-        function confirmRemoveSkipLevel() {
-            const nameSelect = document.getElementById('nameToRemove');
-            const selectedName = nameSelect.value;
-            
-            if (!selectedName) {
-                alert('Please select a name to remove.');
-                return;
-            }
-            
-            // Show final confirmation dialog
-            const confirmMessage = `Are you absolutely sure you want to remove "${selectedName}"?\n\n` +
-                                 `This will:\n` +
-                                 `• Delete the recurring calendar event for "${selectedName}"\n` +
-                                 `• Remove all future occurrences from your calendar\n` +
-                                 `• Remove "${selectedName}" from the app's name list\n\n` +
-                                 `This action cannot be undone.`;
-            
-            if (!confirm(confirmMessage)) {
-                return;
-            }
-            
-            console.log('User confirmed removal of:', selectedName);
-            
-            // Show loading state
-            const removeButton = document.querySelector('button[onclick="confirmRemoveSkipLevel()"]');
-            const originalText = removeButton.textContent;
-            removeButton.textContent = 'Removing...';
-            removeButton.disabled = true;
-            
-            // Call backend to remove the skip level
-            google.script.run
-                .withSuccessHandler(function(result) {
-                    console.log('Skip level removed successfully:', result);
-                    removeButton.textContent = originalText;
-                    removeButton.disabled = false;
-                    
-                    // Show success message
-                    document.getElementById('removalResults').style.display = 'block';
-                    document.getElementById('removalResultsContent').innerHTML = `
-                        <div style="background-color: #d4edda; border: 1px solid #c3e6cb; border-radius: 4px; padding: 15px; color: #155724;">
-                            <strong>✅ Successfully Removed "${result.removedName}"</strong>
-                            <div style="margin-top: 10px;">
-                                <div>• Deleted ${result.deletedEventCount} calendar event(s)</div>
-                                <div>• Removed from name list</div>
-                                <div>• ${result.remainingNames.length} name(s) remaining</div>
-                            </div>
-                        </div>
-                        <div style="text-align: center; margin-top: 20px;">
-                            <button class="button" onclick="goBackToMenu()" style="background-color: #28a745; width: auto; padding: 10px 20px;">
-                                Back to Menu
-                            </button>
-                        </div>
-                    `;
-                    
-                    // Disable the form
-                    nameSelect.disabled = true;
-                    removeButton.style.display = 'none';
-                })
-                .withFailureHandler(function(error) {
-                    console.error('Error removing skip level:', error);
-                    removeButton.textContent = originalText;
-                    removeButton.disabled = false;
-                    
-                    // Show error message
-                    document.getElementById('removalResults').style.display = 'block';
-                    document.getElementById('removalResultsContent').innerHTML = `
-                        <div style="background-color: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; padding: 15px; color: #721c24;">
-                            <strong>❌ Error Removing Skip Level</strong>
-                            <div style="margin-top: 10px;">
-                                ${error.message || error.toString()}
-                            </div>
-                        </div>
-                    `;
-                })
-                .removeSkipLevel(selectedName);
-        }
         
         function showTab(tabName) {
             // Hide all tab contents
@@ -1825,22 +1285,6 @@
                 
                 <button class="button" onclick="handleLoadSkipLevelNames()">
                     Meeting slots
-                </button>
-                
-                <button class="button" onclick="handleSkipLevel1to1List()">
-                    Skip Level List
-                </button>
-                
-                <button class="button" onclick="handleRemoveSkipLevel()">
-                    Remove a Skip Level
-                </button>
-                
-                <button class="button" onclick="handleCheckMissingSkipLevels()">
-                    Check missing Skip Levels
-                </button>
-                
-                <button class="button" onclick="handleSearchAvailableSlots()">
-                    Search for Available Slots
                 </button>
             `;
         }
