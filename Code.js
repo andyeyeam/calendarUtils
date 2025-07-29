@@ -161,8 +161,18 @@ function saveSkipLevelNames(names) {
       .map(name => String(name).trim())
       .filter(name => name.length > 0);
     
+    // Allow empty arrays (when all names are removed)
     if (cleanNames.length === 0) {
-      throw new Error('No valid names provided');
+      Logger.log('Saving empty names list');
+      const properties = PropertiesService.getScriptProperties();
+      properties.setProperty('SKIP_LEVEL_NAMES', JSON.stringify([]));
+      
+      return {
+        success: true,
+        count: 0,
+        names: [],
+        duplicatesRemoved: 0
+      };
     }
     
     // Check for duplicates and remove them
@@ -229,10 +239,15 @@ function clearSkipLevelNames() {
   
   try {
     const properties = PropertiesService.getScriptProperties();
-    properties.deleteProperty('SKIP_LEVEL_NAMES');
+    // Save an empty array instead of deleting the property
+    properties.setProperty('SKIP_LEVEL_NAMES', JSON.stringify([]));
     
-    Logger.log('Successfully cleared skip level names');
-    return { success: true };
+    Logger.log('Successfully cleared skip level names - saved empty array');
+    return { 
+      success: true, 
+      count: 0,
+      names: []
+    };
     
   } catch (error) {
     Logger.log('Error in clearSkipLevelNames: ' + error.toString());

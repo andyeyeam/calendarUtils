@@ -134,6 +134,79 @@
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
+        .actions-dropdown {
+            position: relative;
+            display: inline-block;
+        }
+        .actions-btn {
+            background: linear-gradient(135deg, #6c757d, #5a6268);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 6px 12px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 4px rgba(108,117,125,0.2);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .actions-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(108,117,125,0.3);
+        }
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            right: 0;
+            background-color: white;
+            min-width: 180px;
+            white-space: nowrap;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            border-radius: 6px;
+            z-index: 1000;
+            border: 1px solid #e0e0e0;
+            overflow: hidden;
+        }
+        .dropdown-content.show {
+            display: block;
+            animation: dropdownFadeIn 0.2s ease-out;
+        }
+        @keyframes dropdownFadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .dropdown-item {
+            padding: 10px 16px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            border-bottom: 1px solid #f0f0f0;
+            transition: background-color 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .dropdown-item:last-child {
+            border-bottom: none;
+        }
+        .dropdown-item:hover {
+            background-color: #f8f9fa;
+        }
+        .dropdown-item.remove {
+            color: #dc3545;
+        }
+        .dropdown-item.remove:hover {
+            background-color: #fdf2f2;
+        }
+        .dropdown-item.add {
+            color: #28a745;
+        }
+        .dropdown-item.add:hover {
+            background-color: #f2f9f3;
+        }
     </style>
 </head>
 <body>
@@ -671,12 +744,22 @@
                                     </div>
                                 </div>
                                 <div style="flex-shrink: 0;">
-                                    <button class="remove-name-btn" data-name="${escapeHtml(nameData.name)}" style="background: linear-gradient(135deg, #dc3545, #c82333); color: white; border: none; border-radius: 5px; padding: 6px 12px; font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 2px 4px rgba(220,53,69,0.2);" 
-                                           onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 4px 8px rgba(220,53,69,0.3)'"
-                                           onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 4px rgba(220,53,69,0.2)'"
-                                           title="Remove ${escapeHtml(nameData.name)}">
-                                        Remove
-                                    </button>
+                                    <div class="actions-dropdown">
+                                        <button class="actions-btn" onclick="toggleDropdown('${escapeHtml(nameData.name).replace(/'/g, "\\'")}')">
+                                            Actions
+                                            <span style="font-size: 10px;">▼</span>
+                                        </button>
+                                        <div id="dropdown-${escapeHtml(nameData.name).replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '')}" class="dropdown-content">
+                                            ${!nameData.found ? 
+                                                `<div class="dropdown-item add" onclick="addRecurringMeeting('${escapeHtml(nameData.name).replace(/'/g, "\\'")}')">
+                                                    <span>➕</span> Add Recurring Meeting
+                                                </div>` : ''
+                                            }
+                                            <div class="dropdown-item remove" onclick="removeIndividualName('${escapeHtml(nameData.name).replace(/'/g, "\\'")}')">
+                                                <span>🗑️</span> Remove
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -685,13 +768,51 @@
                 
                 namesList.innerHTML = html;
                 
-                // Add event listeners for remove buttons
-                document.querySelectorAll('.remove-name-btn').forEach(button => {
-                    button.addEventListener('click', function() {
-                        const nameToRemove = this.getAttribute('data-name');
-                        removeIndividualName(nameToRemove);
-                    });
+                // Close dropdowns when clicking outside
+                document.addEventListener('click', function(event) {
+                    if (!event.target.matches('.actions-btn')) {
+                        const dropdowns = document.querySelectorAll('.dropdown-content');
+                        dropdowns.forEach(dropdown => {
+                            dropdown.classList.remove('show');
+                        });
+                    }
                 });
+            }
+        }
+        
+        function toggleDropdown(name) {
+            // Close all other dropdowns first
+            const allDropdowns = document.querySelectorAll('.dropdown-content');
+            allDropdowns.forEach(dropdown => {
+                dropdown.classList.remove('show');
+            });
+            
+            // Generate the same ID as used in the HTML
+            const dropdownId = 'dropdown-' + name.replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '');
+            const dropdown = document.getElementById(dropdownId);
+            
+            if (dropdown) {
+                dropdown.classList.toggle('show');
+            }
+        }
+        
+        function addRecurringMeeting(name) {
+            // Close the dropdown
+            const dropdownId = 'dropdown-' + name.replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '');
+            const dropdown = document.getElementById(dropdownId);
+            if (dropdown) {
+                dropdown.classList.remove('show');
+            }
+            
+            // Show confirmation dialog
+            const confirmMessage = `Add a recurring meeting for "${name}"?\n\n` +
+                                 `This will create a new recurring calendar event with the title:\n` +
+                                 `"Skip Level: ${name}"\n\n` +
+                                 `Note: You'll need to manually configure the meeting time and frequency in your calendar after creation.`;
+            
+            if (confirm(confirmMessage)) {
+                alert(`Feature coming soon!\n\nThis will create a recurring calendar event for "${name}".`);
+                // TODO: Implement actual recurring meeting creation
             }
         }
         
@@ -702,7 +823,25 @@
             
             console.log('Clearing all names');
             
-            // Show loading state
+            // Get the clear button and show spinner
+            const clearButton = document.querySelector('button[onclick="clearAllNames()"]');
+            const originalButtonText = clearButton.innerHTML;
+            
+            // Show spinner on button and disable it
+            clearButton.innerHTML = '<div style="display: inline-flex; align-items: center; gap: 8px;"><div style="border: 2px solid #f3f3f3; border-top: 2px solid #dc3545; border-radius: 50%; width: 16px; height: 16px; animation: spin 1s linear infinite;"></div>Clearing...</div>';
+            clearButton.disabled = true;
+            clearButton.style.opacity = '0.7';
+            clearButton.style.cursor = 'not-allowed';
+            
+            // Helper function to restore button state
+            function restoreButtonState() {
+                clearButton.innerHTML = originalButtonText;
+                clearButton.disabled = false;
+                clearButton.style.opacity = '1';
+                clearButton.style.cursor = 'pointer';
+            }
+            
+            // Show loading state in the names list as well
             document.getElementById('namesList').innerHTML = `
                 <div class="loading-container">
                     <div class="spinner"></div>
@@ -713,12 +852,14 @@
             google.script.run
                 .withSuccessHandler(function(result) {
                     console.log('Names cleared successfully');
+                    restoreButtonState();
                     cachedNamesWithEvents = null; // Clear cache
                     loadCurrentNames();
                     alert('All names have been cleared.');
                 })
                 .withFailureHandler(function(error) {
                     console.error('Error clearing names:', error);
+                    restoreButtonState();
                     alert('Error clearing names: ' + (error.message || error.toString()));
                     loadCurrentNames();
                 })
@@ -728,40 +869,23 @@
         function removeIndividualName(nameToRemove) {
             console.log('Removing individual name:', nameToRemove);
             
-            // Get the current names displayed in the list
-            const namesList = document.getElementById('namesList');
-            const currentNameElements = namesList.querySelectorAll('span[style*="font-weight: bold"]');
-            const currentNamesWithEvents = [];
-            let hasCalendarEvent = false;
+            // Use cached data if available, otherwise get fresh data
+            if (!cachedNamesWithEvents || cachedNamesWithEvents.length === 0) {
+                console.log('No cached data available, refreshing...');
+                // Show loading and refresh data
+                document.getElementById('namesList').innerHTML = `
+                    <div class="loading-container">
+                        <div class="spinner"></div>
+                        <p>Loading current data...</p>
+                    </div>
+                `;
+                loadCurrentNames();
+                return;
+            }
             
-            // Extract current names and their calendar status from the displayed list
-            currentNameElements.forEach(nameElement => {
-                const name = nameElement.textContent.trim();
-                const parentRow = nameElement.closest('div[style*="border: 1px solid"]');
-                const hasCalendarLink = parentRow && parentRow.querySelector('a[style*="color: #28a745"]');
-                
-                if (name === nameToRemove && hasCalendarLink) {
-                    hasCalendarEvent = true;
-                }
-                
-                if (hasCalendarLink) {
-                    // Extract the calendar link and next occurrence
-                    const linkElement = parentRow.querySelector('a[style*="color: #28a745"]');
-                    currentNamesWithEvents.push({
-                        name: name,
-                        found: true,
-                        nextOccurrence: linkElement.textContent,
-                        calendarLink: linkElement.href
-                    });
-                } else {
-                    currentNamesWithEvents.push({
-                        name: name,
-                        found: false,
-                        nextOccurrence: null,
-                        calendarLink: null
-                    });
-                }
-            });
+            const currentNamesWithEvents = [...cachedNamesWithEvents];
+            const nameToRemoveData = currentNamesWithEvents.find(nameData => nameData.name === nameToRemove);
+            const hasCalendarEvent = nameToRemoveData ? nameToRemoveData.found : false;
             
             // Show immediate warning message
             let confirmMessage = `⚠️ WARNING ⚠️\n\nThis action will remove "${nameToRemove}" from the names list.`;
@@ -875,35 +999,21 @@
             
             console.log('Adding individual name:', newName);
             
-            // Get the current names displayed in the list
-            const namesList = document.getElementById('namesList');
-            const currentNameElements = namesList.querySelectorAll('span[style*="font-weight: bold"]');
-            const currentNamesWithEvents = [];
+            // Use cached data if available, otherwise get fresh data
+            if (!cachedNamesWithEvents) {
+                console.log('No cached data available, refreshing...');
+                // Show loading and refresh data
+                document.getElementById('namesList').innerHTML = `
+                    <div class="loading-container">
+                        <div class="spinner"></div>
+                        <p>Loading current data...</p>
+                    </div>
+                `;
+                loadCurrentNames();
+                return;
+            }
             
-            // Extract current names and their calendar status from the displayed list
-            currentNameElements.forEach(nameElement => {
-                const name = nameElement.textContent.trim();
-                const parentRow = nameElement.closest('div[style*="border: 1px solid"]');
-                const hasCalendarLink = parentRow && parentRow.querySelector('a[style*="color: #28a745"]');
-                
-                if (hasCalendarLink) {
-                    // Extract the calendar link and next occurrence
-                    const linkElement = parentRow.querySelector('a[style*="color: #28a745"]');
-                    currentNamesWithEvents.push({
-                        name: name,
-                        found: true,
-                        nextOccurrence: linkElement.textContent,
-                        calendarLink: linkElement.href
-                    });
-                } else {
-                    currentNamesWithEvents.push({
-                        name: name,
-                        found: false,
-                        nextOccurrence: null,
-                        calendarLink: null
-                    });
-                }
-            });
+            const currentNamesWithEvents = [...cachedNamesWithEvents];
             
             // Check if name already exists
             const existingName = currentNamesWithEvents.find(nameData => nameData.name === newName);
