@@ -93,7 +93,7 @@
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
-        .tab:first-child {
+        .tab:not(:last-child) {
             border-right: 1px solid #dee2e6;
         }
         .tab:hover {
@@ -272,6 +272,7 @@
                     <button class="tab active" onclick="showTab('currentNames')">Current Names</button>
                     <button class="tab" onclick="showTab('uploadFile')">Upload Names from File</button>
                     <button class="tab" onclick="showTab('meetingSlots')">Meeting Slots</button>
+                    <button class="tab" onclick="showTab('properties')">Properties</button>
                 </div>
                 
                 <!-- Current Names Tab -->
@@ -289,10 +290,10 @@
                                         <span>🔄</span> Refresh
                                     </div>
                                     <div class="dropdown-item add" onclick="addAllMeetings(); closeActionsDropdown();" style="white-space: nowrap;">
-                                        <span>➕</span> Add all Meetings
+                                        <span>➕</span> Add Missing Meetings
                                     </div>
                                     <div class="dropdown-item remove" onclick="deleteAllMeetings(); closeActionsDropdown();" style="white-space: nowrap;">
-                                        <span>🗑️</span> Delete all Meetings
+                                        <span>🗑️</span> Delete All
                                     </div>
                                 </div>
                             </div>
@@ -394,6 +395,43 @@
                         </div>
                     </div>
                 </div>
+                
+                <!-- Properties Tab -->
+                <div id="propertiesTab" class="tab-content">
+                    <div style="padding: 24px; border-radius: 0 0 8px 8px;">
+                        <h2 style="margin-top: 0; color: #333; border-bottom: 2px solid #28a745; padding-bottom: 10px;">Application Properties</h2>
+                        <p style="color: #666; margin-bottom: 20px;">
+                            Configure application settings and properties
+                        </p>
+                        
+                        <div style="background-color: #f8f9fa; padding: 20px; border-radius: 4px; margin-bottom: 20px;">
+                            <div style="display: grid; grid-template-columns: 1fr auto; gap: 20px; align-items: center;">
+                                <div>
+                                    <label style="display: block; margin-bottom: 8px; font-weight: bold; font-size: 16px;">Recurring Interval (weeks):</label>
+                                    <p style="color: #666; margin-bottom: 15px; font-size: 14px;">
+                                        Number of weeks between recurring skip level meetings (1-26)
+                                    </p>
+                                    <div style="display: flex; align-items: center; gap: 15px;">
+                                        <input type="number" id="recurringIntervalInput" min="1" max="26" value="8" 
+                                               style="width: 80px; padding: 10px; border: 2px solid #ddd; border-radius: 4px; font-size: 16px; text-align: center;"
+                                               onchange="validateRecurringInterval()">
+                                        <span style="color: #666; font-size: 14px;">weeks</span>
+                                        <div id="recurringIntervalStatus" style="margin-left: 10px;"></div>
+                                    </div>
+                                </div>
+                                <div style="text-align: center;">
+                                    <button id="savePropertiesBtn" class="button" onclick="saveRecurringInterval()" 
+                                            style="background-color: #28a745; width: auto; padding: 12px 24px; margin: 0;">
+                                        Save Changes
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div id="propertiesStatus" style="margin-top: 20px; padding: 15px; border-radius: 4px; display: none;">
+                        </div>
+                    </div>
+                </div>
             `;
             
             // Check if we have valid cached data to avoid redundant searches
@@ -407,6 +445,9 @@
             
             // Load meeting slots data for the Meeting Slots tab
             loadMeetingSlots();
+            
+            // Load properties data for the Properties tab
+            loadCurrentProperties();
         }
         
         
@@ -482,7 +523,10 @@
                 document.getElementById('namesList').innerHTML = `
                     <div class="loading-container">
                         <div class="spinner"></div>
-                        <p>Checking for duplicates and saving ${uniqueNames.length} names...</p>
+                        <p>Saving ${uniqueNames.length} names and searching calendar events...</p>
+                        <div style="color: #6c757d; font-size: 12px; margin-top: 10px;">
+                            This may take a moment while we search for existing calendar events
+                        </div>
                     </div>
                 `;
                 
@@ -517,19 +561,19 @@
                         // Combine existing names with new names
                         const allNames = [...currentNames, ...newNames];
                         
-                        // Save the combined list
+                        // Save the new names with calendar search
                         google.script.run
                             .withSuccessHandler(function(result) {
-                                console.log('Names saved successfully:', result);
+                                console.log('Names with calendar data saved successfully:', result);
                                 restoreButtonState();
-                                cachedNamesWithEvents = null; // Clear cache to force calendar search
+                                cachedNamesWithEvents = null; // Clear cache to force reload
                                 loadCurrentNames();
-                                alert(`Successfully added ${newNames.length} new names!`);
+                                alert(`Successfully added ${newNames.length} new names with calendar event search!`);
                             })
                             .withFailureHandler(function(error) {
-                                console.error('Error saving names:', error);
+                                console.error('Error saving names with calendar data:', error);
                                 restoreButtonState();
-                                alert('Error saving names: ' + (error.message || error.toString()));
+                                alert('Error saving names with calendar data: ' + (error.message || error.toString()));
                                 loadCurrentNames();
                             })
                             .saveSkipLevelNames(allNames);
@@ -719,30 +763,25 @@
         }
         
         function deleteAllMeetings() {
-            console.log('Delete all meetings requested');
+            console.log('Delete all requested - clearing names list and calendar events');
             
             if (!cachedNamesWithEvents || cachedNamesWithEvents.length === 0) {
                 alert('No names loaded. Please refresh the list first.');
                 return;
             }
             
-            // Count how many names have meetings
+            const totalNames = cachedNamesWithEvents.length;
             const namesWithMeetings = cachedNamesWithEvents.filter(nameData => nameData.found);
-            
-            if (namesWithMeetings.length === 0) {
-                alert('No recurring meetings found to delete.');
-                return;
-            }
             
             // Show detailed confirmation
             const confirmMessage = `⚠️ CRITICAL WARNING ⚠️\n\n` +
-                                 `This action will DELETE ALL recurring Skip Level meetings for ALL names in your list!\n\n` +
-                                 `Names with meetings to be deleted: ${namesWithMeetings.length}\n` +
-                                 `• ${namesWithMeetings.map(n => n.name).join('\\n• ')}\n\n` +
-                                 `This will DELETE:\n` +
-                                 `• ALL current and future occurrences of these meetings\n` +
-                                 `• The entire recurring series for each name\n\n` +
-                                 `THIS CANNOT BE UNDONE!\n\n` +
+                                 `This action will:\n` +
+                                 `• DELETE ALL ${totalNames} names from the list\n` +
+                                 `• DELETE ALL recurring Skip Level calendar events\n\n` +
+                                 `Names to be removed: ${totalNames}\n` +
+                                 `• ${cachedNamesWithEvents.map(n => n.name).join('\\n• ')}\n\n` +
+                                 `Calendar events to be deleted: ${namesWithMeetings.length} recurring series\n\n` +
+                                 `THIS WILL COMPLETELY CLEAR EVERYTHING AND CANNOT BE UNDONE!\n\n` +
                                  `Are you absolutely certain you want to proceed?`;
             
             if (!confirm(confirmMessage)) {
@@ -750,7 +789,7 @@
             }
             
             // Final confirmation
-            if (!confirm(`FINAL CONFIRMATION:\n\nDelete ALL ${namesWithMeetings.length} recurring meeting series?\n\nThis is your LAST CHANCE to cancel!`)) {
+            if (!confirm(`FINAL CONFIRMATION:\n\nClear ALL names and delete ALL calendar events?\n\nThis is your LAST CHANCE to cancel!`)) {
                 return;
             }
             
@@ -758,50 +797,60 @@
             document.getElementById('namesList').innerHTML = `
                 <div class="loading-container">
                     <div class="spinner"></div>
-                    <p>Deleting all recurring meetings...</p>
+                    <p>Clearing all names and deleting calendar events...</p>
                     <div style="color: #6c757d; font-size: 12px; margin-top: 10px;">
                         This may take a moment. Please wait...
                     </div>
                 </div>
             `;
             
-            // Call backend to delete all meetings
+            // First delete all meetings, then clear names
             google.script.run
-                .withSuccessHandler(function(result) {
-                    console.log('All meetings deleted successfully:', result);
+                .withSuccessHandler(function(deleteResult) {
+                    console.log('All meetings deleted successfully:', deleteResult);
                     
-                    // Clear cache and refresh the list
-                    cachedNamesWithEvents = null;
-                    cacheTimestamp = null;
-                    
-                    // Show success message
-                    let successMessage = `✓ Successfully deleted all recurring meetings!\n\n`;
-                    successMessage += `Summary:\n`;
-                    successMessage += `• Total names processed: ${result.totalNames}\n`;
-                    successMessage += `• Meetings deleted: ${result.meetingsDeleted}\n`;
-                    successMessage += `• Names with no meetings: ${result.namesWithoutMeetings}`;
-                    
-                    if (result.errors && result.errors.length > 0) {
-                        successMessage += `\n\nWarnings:\n`;
-                        successMessage += `• ${result.errors.join('\\n• ')}`;
-                    }
-                    
-                    alert(successMessage);
-                    
-                    // Refresh the names list to show updated status
-                    loadCurrentNames();
+                    // Now clear all names
+                    google.script.run
+                        .withSuccessHandler(function(clearResult) {
+                            console.log('All names cleared successfully:', clearResult);
+                            
+                            // Clear cache and refresh the list
+                            cachedNamesWithEvents = null;
+                            cacheTimestamp = null;
+                            
+                            // Show success message
+                            let successMessage = `✓ Successfully cleared everything!\n\n`;
+                            successMessage += `Summary:\n`;
+                            successMessage += `• Names cleared: ${totalNames}\n`;
+                            successMessage += `• Calendar events deleted: ${deleteResult.meetingsDeleted}\n`;
+                            
+                            if (deleteResult.errors && deleteResult.errors.length > 0) {
+                                successMessage += `\n\nWarnings:\n`;
+                                successMessage += `• ${deleteResult.errors.join('\\n• ')}`;
+                            }
+                            
+                            alert(successMessage);
+                            
+                            // Refresh the names list to show updated status
+                            loadCurrentNames();
+                        })
+                        .withFailureHandler(function(error) {
+                            console.error('Error clearing names:', error);
+                            alert('Error clearing names: ' + (error.message || error.toString()));
+                            loadCurrentNames();
+                        })
+                        .clearSkipLevelNames();
                 })
                 .withFailureHandler(function(error) {
-                    console.error('Error deleting all meetings:', error);
-                    alert('Error deleting meetings: ' + (error.message || error.toString()));
-                    
-                    // Refresh the names list anyway
+                    console.error('Error deleting calendar events:', error);
+                    alert('Error deleting calendar events: ' + (error.message || error.toString()));
                     loadCurrentNames();
                 })
                 .deleteAllRecurringMeetings();
         }
         
         function displayCurrentNames(namesWithEvents) {
+            console.log('displayCurrentNames called with:', namesWithEvents);
             const namesList = document.getElementById('namesList');
             
             if (!namesWithEvents || namesWithEvents.length === 0) {
@@ -811,8 +860,21 @@
                     </div>
                 `;
             } else {
+                console.log('Processing', namesWithEvents.length, 'names for display');
                 // Sort names alphabetically by name property
-                const sortedNamesWithEvents = [...namesWithEvents].sort((a, b) => a.name.localeCompare(b.name));
+                let sortedNamesWithEvents;
+                try {
+                    sortedNamesWithEvents = [...namesWithEvents].sort((a, b) => {
+                        if (!a.name || !b.name) {
+                            console.warn('Name data missing:', a, b);
+                            return 0;
+                        }
+                        return a.name.localeCompare(b.name);
+                    });
+                } catch (error) {
+                    console.error('Error sorting names:', error);
+                    sortedNamesWithEvents = [...namesWithEvents];
+                }
                 
                 let html = `
                     <div style="margin-bottom: 15px; font-weight: bold; color: #333;">
@@ -821,16 +883,25 @@
                 `;
                 
                 sortedNamesWithEvents.forEach((nameData, index) => {
-                    const backgroundColor = index % 2 === 0 ? '#fbfcfd' : '#ffffff';
-                    const borderColor = nameData.found ? '#d4edda' : '#f8d7da';
-                    const leftBorderColor = nameData.found ? '#28a745' : '#dc3545';
+                    try {
+                        console.log('Processing name data:', nameData);
+                        if (!nameData || !nameData.name) {
+                            console.warn('Invalid name data at index', index, ':', nameData);
+                            return;
+                        }
+                        
+                        const backgroundColor = index % 2 === 0 ? '#fbfcfd' : '#ffffff';
+                        const borderColor = nameData.found ? '#d4edda' : '#f8d7da';
+                        const leftBorderColor = nameData.found ? '#28a745' : '#dc3545';
                     
                     // Determine calendar status display
                     let calendarStatus = '';
                     let statusIcon = '';
                     if (nameData.found && nameData.nextOccurrence) {
                         statusIcon = '<span style="color: #28a745; font-size: 14px; margin-right: 8px;">✓</span>';
-                        calendarStatus = `<span style="color: #6c757d; margin-right: 6px;">Next occurrence:</span><a href="${nameData.calendarLink}" target="_blank" style="color: #0066cc; text-decoration: none; font-weight: 500;">📅 ${nameData.nextOccurrence}</a>`;
+                        // Remove any bracketed timezone information from display
+                        const cleanNextOccurrence = nameData.nextOccurrence.replace(/\s*\([^)]*\)/g, '');
+                        calendarStatus = `<span style="color: #6c757d; margin-right: 6px;">Next occurrence:</span><a href="${nameData.calendarLink}" target="_blank" style="color: #0066cc; text-decoration: none; font-weight: 500;">📅 ${cleanNextOccurrence}</a>`;
                     } else {
                         statusIcon = '<span style="color: #dc3545; font-size: 14px; margin-right: 8px;">✗</span>';
                         calendarStatus = '<span style="color: #6c757d; font-style: italic;">No meeting scheduled</span>';
@@ -869,6 +940,9 @@
                             </div>
                         </div>
                     `;
+                    } catch (error) {
+                        console.error('Error processing name data at index', index, ':', error, nameData);
+                    }
                 });
                 
                 namesList.innerHTML = html;
@@ -1180,7 +1254,10 @@
             document.getElementById('namesList').innerHTML = `
                 <div class="loading-container">
                     <div class="spinner"></div>
-                    <p>Adding "${newName}" to list...</p>
+                    <p>Adding "${newName}" and searching calendar...</p>
+                    <div style="color: #6c757d; font-size: 12px; margin-top: 10px;">
+                        Searching for existing calendar events
+                    </div>
                 </div>
             `;
             
@@ -1197,31 +1274,24 @@
             
             google.script.run
                 .withSuccessHandler(function(result) {
-                    console.log('Name added successfully');
+                    console.log('Name added successfully with calendar search');
                     
-                    // Add the new name to the current list without calendar search
-                    const updatedNamesWithEvents = [...currentNamesWithEvents, {
-                        name: newName,
-                        found: false,
-                        nextOccurrence: null,
-                        calendarLink: null
-                    }];
+                    // Clear cache to force reload from sheet with calendar data
+                    cachedNamesWithEvents = null;
+                    cacheTimestamp = null;
                     
-                    // Update cache with the new data
-                    cachedNamesWithEvents = updatedNamesWithEvents;
-                    
-                    // Display the updated list (this will sort alphabetically)
-                    displayCurrentNames(updatedNamesWithEvents);
-                    
-                    // Reset form and show success message
+                    // Reset form
                     addButton.textContent = originalText;
                     addButton.disabled = false;
                     nameInput.disabled = false;
                     nameInput.value = ''; // Clear the input
                     
+                    // Reload the current names to show updated calendar data
+                    loadCurrentNames();
+                    
                     // Show success message
                     setTimeout(() => {
-                        alert(`✓ "${newName}" has been successfully added to the list.`);
+                        alert(`✓ "${newName}" has been successfully added with calendar event search.`);
                     }, 100);
                 })
                 .withFailureHandler(function(error) {
@@ -1451,6 +1521,128 @@
             // Add active class to clicked tab
             const clickedTab = event.target;
             clickedTab.classList.add('active');
+            
+            // Load tab-specific data
+            if (tabName === 'properties') {
+                loadCurrentProperties();
+            }
+        }
+        
+        function loadCurrentProperties() {
+            console.log('Loading current properties');
+            
+            const recurringIntervalInput = document.getElementById('recurringIntervalInput');
+            
+            // Load the recurring interval property
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    console.log('Properties loaded:', result);
+                    
+                    // Update the input field with current value
+                    recurringIntervalInput.value = result.value || 8;
+                })
+                .withFailureHandler(function(error) {
+                    console.error('Error loading properties:', error);
+                    // Set default value in input on error
+                    recurringIntervalInput.value = 8;
+                })
+                .getProperty('Recurring Interval');
+        }
+        
+        function validateRecurringInterval() {
+            const input = document.getElementById('recurringIntervalInput');
+            const statusElement = document.getElementById('recurringIntervalStatus');
+            const value = parseInt(input.value);
+            
+            if (isNaN(value) || value < 1 || value > 26) {
+                statusElement.innerHTML = '<span style="color: #dc3545; font-size: 12px;">⚠️ Must be 1-26</span>';
+                statusElement.style.display = 'block';
+                return false;
+            } else {
+                statusElement.innerHTML = '<span style="color: #28a745; font-size: 12px;">✓ Valid</span>';
+                statusElement.style.display = 'block';
+                return true;
+            }
+        }
+        
+        function saveRecurringInterval() {
+            console.log('Saving recurring interval');
+            
+            const input = document.getElementById('recurringIntervalInput');
+            const saveButton = document.getElementById('savePropertiesBtn');
+            const statusElement = document.getElementById('propertiesStatus');
+            
+            // Get the value, default to 8 if empty or invalid
+            let value = parseInt(input.value);
+            if (isNaN(value) || input.value === '') {
+                value = 8;
+                input.value = 8; // Set the input to show the default
+            }
+            
+            // Validate input
+            if (!validateRecurringInterval()) {
+                statusElement.innerHTML = `
+                    <div style="background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;">
+                        <strong>Validation Error:</strong> Recurring interval must be between 1 and 26 weeks.
+                    </div>
+                `;
+                statusElement.style.display = 'block';
+                return;
+            }
+            
+            // Show saving state
+            const originalButtonText = saveButton.innerHTML;
+            saveButton.innerHTML = `
+                <div style="display: inline-flex; align-items: center; gap: 8px;">
+                    <div style="border: 2px solid #f3f3f3; border-top: 2px solid #28a745; border-radius: 50%; width: 16px; height: 16px; animation: spin 1s linear infinite;"></div>
+                    Saving...
+                </div>
+            `;
+            saveButton.disabled = true;
+            
+            statusElement.innerHTML = `
+                <div style="background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb;">
+                    Saving recurring interval...
+                </div>
+            `;
+            statusElement.style.display = 'block';
+            
+            // Save the property
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    console.log('Recurring interval saved:', result);
+                    
+                    // Restore button
+                    saveButton.innerHTML = originalButtonText;
+                    saveButton.disabled = false;
+                    
+                    // Show success message
+                    statusElement.innerHTML = `
+                        <div style="background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb;">
+                            <strong>Success!</strong> ${result.message}
+                        </div>
+                    `;
+                    
+                    // Hide status after 3 seconds
+                    setTimeout(() => {
+                        statusElement.style.display = 'none';
+                    }, 3000);
+                })
+                .withFailureHandler(function(error) {
+                    console.error('Error saving recurring interval:', error);
+                    
+                    // Restore button
+                    saveButton.innerHTML = originalButtonText;
+                    saveButton.disabled = false;
+                    
+                    // Show error message
+                    statusElement.innerHTML = `
+                        <div style="background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;">
+                            <strong>Error:</strong> ${error.message || error.toString()}
+                        </div>
+                    `;
+                })
+                .setRecurringInterval(value);
         }
         
         function goBackToMenu() {

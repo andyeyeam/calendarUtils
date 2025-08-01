@@ -4,6 +4,205 @@ function doGet() {
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
+function getOrCreateStateSheet() {
+  Logger.log('Getting or creating CalendarUtilities State Sheet');
+  
+  try {
+    const sheetName = 'CalendarUtilities State Sheet';
+    const tabName = 'Names';
+    
+    // Try to find existing sheet first
+    const files = DriveApp.getFilesByName(sheetName);
+    let sheet = null;
+    
+    if (files.hasNext()) {
+      const file = files.next();
+      Logger.log('Found existing sheet with ID: ' + file.getId());
+      sheet = SpreadsheetApp.openById(file.getId());
+    } else {
+      Logger.log('Creating new CalendarUtilities State Sheet');
+      sheet = SpreadsheetApp.create(sheetName);
+      Logger.log('Created new sheet with ID: ' + sheet.getId());
+    }
+    
+    // Get or create the Names tab
+    let namesTab = sheet.getSheetByName(tabName);
+    if (!namesTab) {
+      Logger.log('Creating Names tab');
+      namesTab = sheet.insertSheet(tabName);
+      
+      // Set up headers
+      namesTab.getRange(1, 1).setValue('Name');
+      namesTab.getRange(1, 2).setValue('Date Added'); 
+      namesTab.getRange(1, 3).setValue('Status');
+      namesTab.getRange(1, 4).setValue('Calendar Event ID');
+      namesTab.getRange(1, 5).setValue('Event Title');
+      namesTab.getRange(1, 6).setValue('Calendar Link');
+      namesTab.getRange(1, 7).setValue('Next Occurrence');
+      
+      // Format headers
+      const headerRange = namesTab.getRange(1, 1, 1, 7);
+      headerRange.setBackground('#4285f4');
+      headerRange.setFontColor('white');
+      headerRange.setFontWeight('bold');
+      
+      // Auto-resize columns
+      namesTab.autoResizeColumns(1, 7);
+      
+      Logger.log('Names tab created and formatted');
+    } else {
+      Logger.log('Names tab already exists');
+    }
+    
+    // Get or create the Meeting Slots tab
+    const meetingSlotsTabName = 'Meeting Slots';
+    let meetingSlotsTab = sheet.getSheetByName(meetingSlotsTabName);
+    if (!meetingSlotsTab) {
+      Logger.log('Creating Meeting Slots tab');
+      meetingSlotsTab = sheet.insertSheet(meetingSlotsTabName);
+      
+      // Set up headers for Meeting Slots
+      meetingSlotsTab.getRange(1, 1).setValue('Day of Week');
+      meetingSlotsTab.getRange(1, 2).setValue('Time');
+      meetingSlotsTab.getRange(1, 3).setValue('Duration (mins)');
+      meetingSlotsTab.getRange(1, 4).setValue('Date Added');
+      meetingSlotsTab.getRange(1, 5).setValue('Status');
+      
+      // Format headers
+      const meetingHeaderRange = meetingSlotsTab.getRange(1, 1, 1, 5);
+      meetingHeaderRange.setBackground('#cd853f');
+      meetingHeaderRange.setFontColor('white');
+      meetingHeaderRange.setFontWeight('bold');
+      
+      // Auto-resize columns
+      meetingSlotsTab.autoResizeColumns(1, 5);
+      
+      Logger.log('Meeting Slots tab created and formatted');
+    } else {
+      Logger.log('Meeting Slots tab already exists');
+    }
+    
+    // Get or create the Properties tab
+    const propertiesTabName = 'Properties';
+    let propertiesTab = sheet.getSheetByName(propertiesTabName);
+    if (!propertiesTab) {
+      Logger.log('Creating Properties tab');
+      propertiesTab = sheet.insertSheet(propertiesTabName);
+      
+      // Set up headers for Properties
+      propertiesTab.getRange(1, 1).setValue('Property Name');
+      propertiesTab.getRange(1, 2).setValue('Value');
+      propertiesTab.getRange(1, 3).setValue('Description');
+      propertiesTab.getRange(1, 4).setValue('Last Updated');
+      
+      // Format headers
+      const propertiesHeaderRange = propertiesTab.getRange(1, 1, 1, 4);
+      propertiesHeaderRange.setBackground('#28a745');
+      propertiesHeaderRange.setFontColor('white');
+      propertiesHeaderRange.setFontWeight('bold');
+      
+      // Add default Recurring Interval property
+      propertiesTab.getRange(2, 1).setValue('Recurring Interval');
+      propertiesTab.getRange(2, 2).setValue(8); // Default value
+      propertiesTab.getRange(2, 3).setValue('Meeting recurrence interval in weeks (1-26)');
+      propertiesTab.getRange(2, 4).setValue(new Date());
+      
+      // Format the date column
+      const dateRange = propertiesTab.getRange(2, 4, 1, 1);
+      dateRange.setNumberFormat('MM/dd/yyyy HH:mm:ss');
+      
+      // Auto-resize columns
+      propertiesTab.autoResizeColumns(1, 4);
+      
+      Logger.log('Properties tab created and formatted with default Recurring Interval');
+    } else {
+      Logger.log('Properties tab already exists');
+    }
+    
+    return { sheet: sheet, namesTab: namesTab, meetingSlotsTab: meetingSlotsTab, propertiesTab: propertiesTab };
+    
+  } catch (error) {
+    Logger.log('Error in getOrCreateStateSheet: ' + error.toString());
+    throw new Error('Failed to get or create state sheet: ' + error.message);
+  }
+}
+
+function searchCalendarEventForName(name) {
+  Logger.log('Searching calendar events for name: ' + name);
+  
+  try {
+    // Get the default calendar
+    const calendar = CalendarApp.getDefaultCalendar();
+    
+    // Search in a 6-month range to find recurring events
+    const today = new Date();
+    const sixMonthsAhead = new Date();
+    sixMonthsAhead.setMonth(today.getMonth() + 6);
+    
+    // Get events in date range
+    const allEvents = calendar.getEvents(today, sixMonthsAhead);
+    Logger.log('Found ' + allEvents.length + ' events in 6-month range');
+    
+    // Look for events with "Skip Level:" and the specific name
+    for (const event of allEvents) {
+      const title = event.getTitle();
+      
+      if (title && title.includes('Skip Level:') && title.includes(name)) {
+        try {
+          const eventSeries = event.getEventSeries();
+          if (eventSeries) {
+            // This is a recurring event
+            const eventId = eventSeries.getId();
+            const eventStartTime = event.getStartTime();
+            const calendarLink = 'https://calendar.google.com/calendar/u/0/r/day/' + 
+                                eventStartTime.getFullYear() + '/' + 
+                                (eventStartTime.getMonth() + 1) + '/' + 
+                                eventStartTime.getDate();
+            // Format date/time without timezone abbreviation
+            const dateStr = eventStartTime.toLocaleDateString();
+            const timeStr = eventStartTime.toLocaleTimeString().replace(/\s*\([^)]*\)/, '');
+            const nextOccurrence = dateStr + ' ' + timeStr;
+            
+            Logger.log('Found calendar event for ' + name + ': ' + title);
+            return {
+              found: true,
+              eventId: eventId,
+              eventTitle: title,
+              calendarLink: calendarLink,
+              nextOccurrence: nextOccurrence,
+              startTime: eventStartTime
+            };
+          }
+        } catch (error) {
+          Logger.log('Error processing event for ' + name + ': ' + error.toString());
+          // Continue searching other events
+        }
+      }
+    }
+    
+    Logger.log('No calendar event found for name: ' + name);
+    return {
+      found: false,
+      eventId: null,
+      eventTitle: null,
+      calendarLink: null,
+      nextOccurrence: null,
+      startTime: null
+    };
+    
+  } catch (error) {
+    Logger.log('Error in searchCalendarEventForName: ' + error.toString());
+    return {
+      found: false,
+      eventId: null,
+      eventTitle: null,
+      calendarLink: null,
+      nextOccurrence: null,
+      startTime: null
+    };
+  }
+}
+
 
 function getIndexPage() {
   return HtmlService.createHtmlOutputFromFile('index').getContent();
@@ -43,7 +242,7 @@ function debugCalendarEvents() {
 
 
 function saveSkipLevelNames(names) {
-  Logger.log('Saving skip level names: ' + JSON.stringify(names));
+  Logger.log('Saving skip level names to Google Sheet: ' + JSON.stringify(names));
   
   try {
     if (!Array.isArray(names)) {
@@ -55,11 +254,18 @@ function saveSkipLevelNames(names) {
       .map(name => String(name).trim())
       .filter(name => name.length > 0);
     
+    // Get or create the state sheet
+    const { sheet, namesTab, meetingSlotsTab, propertiesTab } = getOrCreateStateSheet();
+    
     // Allow empty arrays (when all names are removed)
     if (cleanNames.length === 0) {
-      Logger.log('Saving empty names list');
-      const properties = PropertiesService.getScriptProperties();
-      properties.setProperty('SKIP_LEVEL_NAMES', JSON.stringify([]));
+      Logger.log('Clearing all names from sheet');
+      
+      // Clear all data except headers
+      const lastRow = namesTab.getLastRow();
+      if (lastRow > 1) {
+        namesTab.getRange(2, 1, lastRow - 1, 7).clearContent();
+      }
       
       return {
         success: true,
@@ -88,11 +294,45 @@ function saveSkipLevelNames(names) {
       Logger.log('Removed duplicates: ' + JSON.stringify(duplicates));
     }
     
-    // Save to PropertiesService for persistence
-    const properties = PropertiesService.getScriptProperties();
-    properties.setProperty('SKIP_LEVEL_NAMES', JSON.stringify(uniqueNames));
+    // Clear existing data and write new names
+    const lastRow = namesTab.getLastRow();
+    if (lastRow > 1) {
+      namesTab.getRange(2, 1, lastRow - 1, 7).clearContent();
+    }
     
-    Logger.log('Successfully saved ' + uniqueNames.length + ' unique names');
+    // Search calendar events for each name and prepare data
+    const currentDate = new Date();
+    const dataToWrite = [];
+    
+    Logger.log('Searching calendar events for ' + uniqueNames.length + ' names...');
+    
+    for (const name of uniqueNames) {
+      const calendarData = searchCalendarEventForName(name);
+      
+      dataToWrite.push([
+        name,                                    // Column A: Name
+        currentDate,                            // Column B: Date Added
+        'Active',                               // Column C: Status
+        calendarData.eventId || '',             // Column D: Calendar Event ID
+        calendarData.eventTitle || '',          // Column E: Event Title
+        calendarData.calendarLink || '',        // Column F: Calendar Link
+        calendarData.nextOccurrence || ''       // Column G: Next Occurrence
+      ]);
+    }
+    
+    if (dataToWrite.length > 0) {
+      const range = namesTab.getRange(2, 1, dataToWrite.length, 7);
+      range.setValues(dataToWrite);
+      
+      // Format the date column
+      const dateRange = namesTab.getRange(2, 2, dataToWrite.length, 1);
+      dateRange.setNumberFormat('MM/dd/yyyy HH:mm:ss');
+      
+      // Auto-resize columns
+      namesTab.autoResizeColumns(1, 7);
+    }
+    
+    Logger.log('Successfully saved ' + uniqueNames.length + ' unique names to Google Sheet');
     return {
       success: true,
       count: uniqueNames.length,
@@ -107,19 +347,31 @@ function saveSkipLevelNames(names) {
 }
 
 function getSkipLevelNames() {
-  Logger.log('Getting skip level names');
+  Logger.log('Getting skip level names from Google Sheet');
   
   try {
-    const properties = PropertiesService.getScriptProperties();
-    const savedNames = properties.getProperty('SKIP_LEVEL_NAMES');
+    // Get or create the state sheet
+    const { sheet, namesTab, meetingSlotsTab, propertiesTab } = getOrCreateStateSheet();
     
-    if (!savedNames) {
-      Logger.log('No saved names found');
+    // Get all data from the Names tab
+    const lastRow = namesTab.getLastRow();
+    
+    if (lastRow <= 1) {
+      Logger.log('No names found in sheet');
       return [];
     }
     
-    const names = JSON.parse(savedNames);
-    Logger.log('Retrieved ' + names.length + ' names: ' + JSON.stringify(names));
+    // Get names from column A (starting from row 2 to skip headers)
+    const namesRange = namesTab.getRange(2, 1, lastRow - 1, 1);
+    const namesData = namesRange.getValues();
+    
+    // Extract names and filter out empty cells
+    const names = namesData
+      .map(row => row[0])
+      .filter(name => name && String(name).trim().length > 0)
+      .map(name => String(name).trim());
+    
+    Logger.log('Retrieved ' + names.length + ' names from Google Sheet: ' + JSON.stringify(names));
     return names;
     
   } catch (error) {
@@ -129,14 +381,22 @@ function getSkipLevelNames() {
 }
 
 function clearSkipLevelNames() {
-  Logger.log('Clearing skip level names');
+  Logger.log('Clearing skip level names from Google Sheet');
   
   try {
-    const properties = PropertiesService.getScriptProperties();
-    // Save an empty array instead of deleting the property
-    properties.setProperty('SKIP_LEVEL_NAMES', JSON.stringify([]));
+    // Get or create the state sheet
+    const { sheet, namesTab, meetingSlotsTab, propertiesTab } = getOrCreateStateSheet();
     
-    Logger.log('Successfully cleared skip level names - saved empty array');
+    // Clear all data except headers
+    const lastRow = namesTab.getLastRow();
+    if (lastRow > 1) {
+      namesTab.getRange(2, 1, lastRow - 1, 7).clearContent();
+      Logger.log('Cleared ' + (lastRow - 1) + ' rows of data from Google Sheet');
+    } else {
+      Logger.log('No data to clear from Google Sheet');
+    }
+    
+    Logger.log('Successfully cleared skip level names from Google Sheet');
     return { 
       success: true, 
       count: 0,
@@ -150,12 +410,15 @@ function clearSkipLevelNames() {
 }
 
 function saveMeetingSlots(meetingSlots) {
-  Logger.log('Saving meeting slots: ' + JSON.stringify(meetingSlots));
+  Logger.log('Saving meeting slots to Google Sheet: ' + JSON.stringify(meetingSlots));
   
   try {
     if (!Array.isArray(meetingSlots)) {
       throw new Error('Meeting slots must be provided as an array');
     }
+    
+    // Get or create the state sheet
+    const { sheet, namesTab, meetingSlotsTab, propertiesTab } = getOrCreateStateSheet();
     
     // Validate each meeting slot
     const validSlots = meetingSlots.map(slot => {
@@ -169,11 +432,36 @@ function saveMeetingSlots(meetingSlots) {
       };
     });
     
-    // Save to PropertiesService for persistence
-    const properties = PropertiesService.getScriptProperties();
-    properties.setProperty('MEETING_SLOTS', JSON.stringify(validSlots));
+    // Clear existing data and write new slots
+    const lastRow = meetingSlotsTab.getLastRow();
+    if (lastRow > 1) {
+      meetingSlotsTab.getRange(2, 1, lastRow - 1, 5).clearContent();
+    }
     
-    Logger.log('Successfully saved ' + validSlots.length + ' meeting slots');
+    if (validSlots.length > 0) {
+      // Prepare data for writing
+      const currentDate = new Date();
+      const dataToWrite = validSlots.map(slot => [
+        slot.dayOfWeek,    // Column A: Day of Week
+        slot.time,         // Column B: Time
+        slot.duration,     // Column C: Duration (mins)
+        currentDate,       // Column D: Date Added
+        'Active'           // Column E: Status
+      ]);
+      
+      // Write all data to sheet
+      const range = meetingSlotsTab.getRange(2, 1, dataToWrite.length, 5);
+      range.setValues(dataToWrite);
+      
+      // Format the date column
+      const dateRange = meetingSlotsTab.getRange(2, 4, dataToWrite.length, 1);
+      dateRange.setNumberFormat('MM/dd/yyyy HH:mm:ss');
+      
+      // Auto-resize columns
+      meetingSlotsTab.autoResizeColumns(1, 5);
+    }
+    
+    Logger.log('Successfully saved ' + validSlots.length + ' meeting slots to Google Sheet');
     return {
       success: true,
       count: validSlots.length,
@@ -187,19 +475,34 @@ function saveMeetingSlots(meetingSlots) {
 }
 
 function getMeetingSlots() {
-  Logger.log('Getting meeting slots');
+  Logger.log('Getting meeting slots from Google Sheet');
   
   try {
-    const properties = PropertiesService.getScriptProperties();
-    const savedSlots = properties.getProperty('MEETING_SLOTS');
+    // Get or create the state sheet
+    const { sheet, namesTab, meetingSlotsTab, propertiesTab } = getOrCreateStateSheet();
     
-    if (!savedSlots) {
-      Logger.log('No saved meeting slots found');
+    // Get all data from the Meeting Slots tab
+    const lastRow = meetingSlotsTab.getLastRow();
+    
+    if (lastRow <= 1) {
+      Logger.log('No meeting slots found in sheet');
       return [];
     }
     
-    const slots = JSON.parse(savedSlots);
-    Logger.log('Retrieved ' + slots.length + ' meeting slots: ' + JSON.stringify(slots));
+    // Get data from columns A through C (starting from row 2 to skip headers)
+    const dataRange = meetingSlotsTab.getRange(2, 1, lastRow - 1, 3);
+    const allData = dataRange.getValues();
+    
+    // Process the data into the expected format
+    const slots = allData
+      .filter(row => row[0] && row[1] && row[2]) // Filter out rows with missing data
+      .map(row => ({
+        dayOfWeek: String(row[0]).trim(),
+        time: String(row[1]).trim(),
+        duration: String(row[2]).trim()
+      }));
+    
+    Logger.log('Retrieved ' + slots.length + ' meeting slots from Google Sheet: ' + JSON.stringify(slots));
     return slots;
     
   } catch (error) {
@@ -209,13 +512,22 @@ function getMeetingSlots() {
 }
 
 function clearMeetingSlots() {
-  Logger.log('Clearing meeting slots');
+  Logger.log('Clearing meeting slots from Google Sheet');
   
   try {
-    const properties = PropertiesService.getScriptProperties();
-    properties.deleteProperty('MEETING_SLOTS');
+    // Get or create the state sheet
+    const { sheet, namesTab, meetingSlotsTab, propertiesTab } = getOrCreateStateSheet();
     
-    Logger.log('Successfully cleared meeting slots');
+    // Clear all data except headers
+    const lastRow = meetingSlotsTab.getLastRow();
+    if (lastRow > 1) {
+      meetingSlotsTab.getRange(2, 1, lastRow - 1, 5).clearContent();
+      Logger.log('Cleared ' + (lastRow - 1) + ' rows of meeting slots from Google Sheet');
+    } else {
+      Logger.log('No meeting slots data to clear from Google Sheet');
+    }
+    
+    Logger.log('Successfully cleared meeting slots from Google Sheet');
     return { success: true };
     
   } catch (error) {
@@ -298,9 +610,8 @@ function removeSkipLevel(nameToRemove) {
     // Remove the name from the stored names list
     const updatedNames = currentNames.filter(name => name !== trimmedName);
     
-    // Save the updated names list
-    const properties = PropertiesService.getScriptProperties();
-    properties.setProperty('SKIP_LEVEL_NAMES', JSON.stringify(updatedNames));
+    // Save the updated names list to Google Sheet
+    saveSkipLevelNames(updatedNames);
     
     Logger.log('Successfully removed "' + trimmedName + '" from names list. Deleted ' + deletedCount + ' calendar event(s)');
     
@@ -1061,135 +1372,203 @@ function deleteAllRecurringMeetings() {
 }
 
 function getNamesWithCalendarEvents() {
-  Logger.log('Getting names with calendar events');
+  Logger.log('Getting names with calendar events from Google Sheet');
   
   try {
-    // Get loaded names
-    const names = getSkipLevelNames();
-    if (names.length === 0) {
-      Logger.log('No names loaded, returning empty array');
+    // Get or create the state sheet
+    const { sheet, namesTab, meetingSlotsTab, propertiesTab } = getOrCreateStateSheet();
+    
+    // Get all data from the Names tab
+    const lastRow = namesTab.getLastRow();
+    
+    if (lastRow <= 1) {
+      Logger.log('No names found in sheet');
       return [];
     }
     
-    Logger.log('Checking calendar events for ' + names.length + ' names: ' + JSON.stringify(names));
+    // Get all data from columns A through G (starting from row 2 to skip headers)
+    const dataRange = namesTab.getRange(2, 1, lastRow - 1, 7);
+    const allData = dataRange.getValues();
     
-    // Get the default calendar
-    const calendar = CalendarApp.getDefaultCalendar();
-    
-    // For recurring events, we need a longer range to ensure we find the series
-    // Use 6 months to balance performance with event discovery
-    const today = new Date();
-    const sixMonthsAhead = new Date();
-    sixMonthsAhead.setMonth(today.getMonth() + 6);
-    
-    // Get events in date range
-    const allEvents = calendar.getEvents(today, sixMonthsAhead);
-    Logger.log('Total events found in 6-month range: ' + allEvents.length);
-    
-    // First, let's see all event titles to debug
-    const skipLevelEvents = allEvents.filter(event => {
-      const title = event.getTitle();
-      return title && title.includes('Skip Level:');
-    });
-    Logger.log('Events with "Skip Level:" in title: ' + skipLevelEvents.length);
-    
-    skipLevelEvents.forEach((event, index) => {
-      Logger.log('Skip Level Event ' + (index + 1) + ': "' + event.getTitle() + '"');
-    });
-    
-    // Pre-process events: group recurring events by series ID and find next occurrence
-    const recurringEventSeries = new Map(); // seriesId -> {title, nextOccurrence, calendarLink}
-    const currentTime = new Date();
-    
-    allEvents.forEach(event => {
-      const title = event.getTitle();
-      
-      // Only process events with "Skip Level:" in title
-      if (!title || !title.includes('Skip Level:')) {
-        return;
-      }
-      
-      Logger.log('Processing Skip Level event: "' + title + '"');
-      
-      try {
-        const eventSeries = event.getEventSeries();
-        if (eventSeries) {
-          // This is a recurring event
-          const seriesId = eventSeries.getId();
-          const eventStartTime = event.getStartTime();
-          
-          // Only consider future events for "next occurrence"
-          if (eventStartTime >= currentTime) {
-            if (!recurringEventSeries.has(seriesId)) {
-              // First time seeing this series
-              recurringEventSeries.set(seriesId, {
-                title: title,
-                nextOccurrence: eventStartTime.toLocaleDateString() + ' ' + eventStartTime.toLocaleTimeString(),
-                startTime: eventStartTime,
-                calendarLink: 'https://calendar.google.com/calendar/u/0/r/day/' + eventStartTime.getFullYear() + '/' + (eventStartTime.getMonth() + 1) + '/' + eventStartTime.getDate()
-              });
-            } else {
-              // Check if this is a sooner next occurrence
-              const existingEvent = recurringEventSeries.get(seriesId);
-              if (eventStartTime < existingEvent.startTime) {
-                recurringEventSeries.set(seriesId, {
-                  title: title,
-                  nextOccurrence: eventStartTime.toLocaleDateString() + ' ' + eventStartTime.toLocaleTimeString(),
-                  startTime: eventStartTime,
-                  calendarLink: 'https://calendar.google.com/calendar/u/0/r/day/' + eventStartTime.getFullYear() + '/' + (eventStartTime.getMonth() + 1) + '/' + eventStartTime.getDate()
-                });
-              }
-            }
-          }
-        }
-      } catch (error) {
-        // Skip if error getting event series
-      }
-    });
-    
-    Logger.log('Found ' + recurringEventSeries.size + ' distinct recurring skip level event series');
-    
-    // Now check each name against the pre-processed recurring events
-    const results = [];
-    
-    names.forEach(name => {
-      Logger.log('Checking for name: "' + name + '"');
-      
-      let found = false;
-      let nextOccurrence = null;
-      let calendarLink = null;
-      
-      // Search through the pre-processed recurring events
-      for (const [seriesId, eventData] of recurringEventSeries) {
-        Logger.log('Comparing name "' + name + '" with event title: "' + eventData.title + '"');
+    // Process the data into the expected format
+    const results = allData
+      .filter(row => row[0] && String(row[0]).trim().length > 0) // Filter out empty names
+      .map(row => {
+        const name = String(row[0]).trim();
+        const eventId = row[3] ? String(row[3]).trim() : '';
+        const eventTitle = row[4] ? String(row[4]).trim() : '';
+        const calendarLink = row[5] ? String(row[5]).trim() : '';
+        const nextOccurrence = row[6] ? String(row[6]).trim() : '';
         
-        // Check if the event title contains "Skip Level:" and the name
-        if (eventData.title.includes('Skip Level:') && eventData.title.includes(name)) {
-          found = true;
-          nextOccurrence = eventData.nextOccurrence;
-          calendarLink = eventData.calendarLink;
-          Logger.log('✓ Found match for "' + name + '" in series: ' + eventData.title);
-          break; // We only need to find one match
-        } else {
-          Logger.log('✗ No match for "' + name + '" in title: ' + eventData.title);
-        }
-      }
-      
-      Logger.log('Name "' + name + '" - found: ' + found);
-      
-      results.push({
-        name: name,
-        found: found,
-        nextOccurrence: nextOccurrence,
-        calendarLink: calendarLink
+        return {
+          name: name,
+          found: !!(eventId || eventTitle), // Has calendar event if either ID or title exists
+          nextOccurrence: nextOccurrence || null,
+          calendarLink: calendarLink || null
+        };
       });
-    });
     
-    Logger.log('Calendar check completed for ' + names.length + ' names');
+    Logger.log('Retrieved ' + results.length + ' names with calendar data from Google Sheet');
     return results;
     
   } catch (error) {
     Logger.log('Error in getNamesWithCalendarEvents: ' + error.toString());
     throw new Error('Failed to get names with calendar events: ' + error.message);
+  }
+}
+
+function saveProperty(propertyName, value, description = '') {
+  Logger.log(`Saving property: ${propertyName} = ${value}`);
+  
+  try {
+    if (!propertyName || typeof propertyName !== 'string') {
+      throw new Error('Property name must be a non-empty string');
+    }
+    
+    const { sheet, namesTab, meetingSlotsTab, propertiesTab } = getOrCreateStateSheet();
+    
+    // Find if property already exists
+    const data = propertiesTab.getDataRange().getValues();
+    let propertyRow = -1;
+    
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0] === propertyName) {
+        propertyRow = i + 1; // Convert to 1-based row number
+        break;
+      }
+    }
+    
+    if (propertyRow > 0) {
+      // Update existing property
+      propertiesTab.getRange(propertyRow, 2).setValue(value);
+      propertiesTab.getRange(propertyRow, 4).setValue(new Date());
+    } else {
+      // Add new property
+      const nextRow = propertiesTab.getLastRow() + 1;
+      propertiesTab.getRange(nextRow, 1).setValue(propertyName);
+      propertiesTab.getRange(nextRow, 2).setValue(value);
+      propertiesTab.getRange(nextRow, 3).setValue(description);
+      propertiesTab.getRange(nextRow, 4).setValue(new Date());
+      
+      // Format the date column
+      propertiesTab.getRange(nextRow, 4).setNumberFormat('MM/dd/yyyy HH:mm:ss');
+    }
+    
+    Logger.log(`Property ${propertyName} saved successfully`);
+    return {
+      success: true,
+      propertyName: propertyName,
+      value: value
+    };
+    
+  } catch (error) {
+    Logger.log('Error in saveProperty: ' + error.toString());
+    throw new Error('Failed to save property: ' + error.message);
+  }
+}
+
+function getProperty(propertyName) {
+  Logger.log(`Getting property: ${propertyName}`);
+  
+  try {
+    if (!propertyName || typeof propertyName !== 'string') {
+      throw new Error('Property name must be a non-empty string');
+    }
+    
+    const { sheet, namesTab, meetingSlotsTab, propertiesTab } = getOrCreateStateSheet();
+    
+    // Get all data and find the property
+    const data = propertiesTab.getDataRange().getValues();
+    
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0] === propertyName) {
+        const value = data[i][1];
+        const description = data[i][2];
+        const lastUpdated = data[i][3];
+        
+        Logger.log(`Found property ${propertyName} with value: ${value}`);
+        return {
+          found: true,
+          value: value,
+          description: description,
+          lastUpdated: lastUpdated
+        };
+      }
+    }
+    
+    Logger.log(`Property ${propertyName} not found`);
+    return {
+      found: false,
+      value: null,
+      description: null,
+      lastUpdated: null
+    };
+    
+  } catch (error) {
+    Logger.log('Error in getProperty: ' + error.toString());
+    throw new Error('Failed to get property: ' + error.message);
+  }
+}
+
+function getRecurringInterval() {
+  Logger.log('Getting recurring interval property');
+  
+  try {
+    const result = getProperty('Recurring Interval');
+    
+    if (result.found) {
+      const value = parseInt(result.value);
+      
+      // Validate range
+      if (isNaN(value) || value < 1 || value > 26) {
+        Logger.log(`Invalid recurring interval value: ${result.value}, using default 8`);
+        return 8;
+      }
+      
+      Logger.log(`Retrieved recurring interval: ${value}`);
+      return value;
+    } else {
+      Logger.log('Recurring interval not found, using default 8');
+      return 8;
+    }
+    
+  } catch (error) {
+    Logger.log('Error in getRecurringInterval: ' + error.toString());
+    return 8; // Return default value on error
+  }
+}
+
+function setRecurringInterval(weeks) {
+  Logger.log(`Setting recurring interval to: ${weeks}`);
+  
+  try {
+    // Validate input
+    const value = parseInt(weeks);
+    
+    if (isNaN(value)) {
+      throw new Error('Recurring interval must be a number');
+    }
+    
+    if (value < 1 || value > 26) {
+      throw new Error('Recurring interval must be between 1 and 26 weeks');
+    }
+    
+    // Save the property
+    const result = saveProperty(
+      'Recurring Interval', 
+      value, 
+      'Meeting recurrence interval in weeks (1-26)'
+    );
+    
+    Logger.log(`Recurring interval set to ${value} weeks`);
+    return {
+      success: true,
+      value: value,
+      message: `Recurring interval set to ${value} weeks`
+    };
+    
+  } catch (error) {
+    Logger.log('Error in setRecurringInterval: ' + error.toString());
+    throw new Error('Failed to set recurring interval: ' + error.message);
   }
 }
