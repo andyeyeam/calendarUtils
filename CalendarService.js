@@ -147,33 +147,57 @@ function getNextDateForDayOfWeek(startDate, dayOfWeek) {
   return targetDate;
 }
 
+function parseTimeString(timeStr) {
+  try {
+    Logger.log(`Parsing time string: ${timeStr}`);
+    
+    if (!timeStr || !timeStr.includes(':')) {
+      Logger.log(`Invalid time format: ${timeStr}`);
+      return null;
+    }
+    
+    const timeParts = timeStr.split(':');
+    let hours = parseInt(timeParts[0]);
+    const minutesPart = timeParts[1].toLowerCase();
+    
+    // Extract minutes (remove any non-digit characters like AM/PM)
+    const minutes = parseInt(minutesPart.replace(/[^\d]/g, ''));
+    
+    // Handle 12-hour format (with AM/PM)
+    if (minutesPart.includes('pm') && hours !== 12) {
+      hours += 12;
+    } else if (minutesPart.includes('am') && hours === 12) {
+      hours = 0;
+    }
+    // For 24-hour format (no AM/PM), hours stay as-is
+    
+    // Validate hours and minutes
+    if (isNaN(hours) || isNaN(minutes) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+      Logger.log(`Invalid time values: hours=${hours}, minutes=${minutes}`);
+      return null;
+    }
+    
+    Logger.log(`Parsed time: ${hours}:${minutes.toString().padStart(2, '0')} (24-hour format)`);
+    return { hours: hours, minutes: minutes };
+    
+  } catch (error) {
+    Logger.log(`Error parsing time string: ${error.toString()}`);
+    return null;
+  }
+}
+
 function parseSlotTime(date, timeStr, duration) {
   try {
     Logger.log(`Parsing slot time: ${timeStr} on ${date.toDateString()} for ${duration} minutes`);
     
-    // Parse time string (e.g., "2:00 PM", "14:00")
-    let hours, minutes;
-    
-    if (timeStr.includes(':')) {
-      const timeParts = timeStr.split(':');
-      hours = parseInt(timeParts[0]);
-      const minutesPart = timeParts[1].toLowerCase();
-      
-      if (minutesPart.includes('pm') && hours !== 12) {
-        hours += 12;
-      } else if (minutesPart.includes('am') && hours === 12) {
-        hours = 0;
-      }
-      
-      minutes = parseInt(minutesPart.replace(/[^\d]/g, ''));
-    } else {
-      Logger.log(`Invalid time format: ${timeStr}`);
+    const timeResult = parseTimeString(timeStr);
+    if (!timeResult) {
       return null;
     }
     
     // Create start datetime
     const startDateTime = new Date(date);
-    startDateTime.setHours(hours, minutes, 0, 0);
+    startDateTime.setHours(timeResult.hours, timeResult.minutes, 0, 0);
     
     // Parse duration and create end datetime
     const durationMinutes = parseInt(duration);

@@ -110,11 +110,17 @@ function createMeetingsForSpecificNames(namesToProcess) {
             continue;
           }
           
-          // Parse the time
-          const timeParts = slot.time.split(':');
-          const hour = parseInt(timeParts[0]);
-          const minute = parseInt(timeParts[1]);
+          // Parse the time using proper 24-hour format handling
+          Logger.log('Processing slot time: ' + slot.time);
+          const timeResult = parseTimeString(slot.time);
+          if (!timeResult) {
+            Logger.log('Invalid time format for slot: ' + slot.time);
+            continue;
+          }
+          const hour = timeResult.hours;
+          const minute = timeResult.minutes;
           const duration = parseInt(slot.duration);
+          Logger.log('Parsed time - hours: ' + hour + ', minutes: ' + minute);
           
           // Find the occurrence of this day in this specific week
           let currentDate = new Date(today);
@@ -128,6 +134,8 @@ function createMeetingsForSpecificNames(namesToProcess) {
           // Create the start and end times for this potential slot
           const slotStart = new Date(currentDate);
           slotStart.setHours(hour, minute, 0, 0);
+          Logger.log('Setting calendar event time to: ' + slotStart.toString());
+          Logger.log('Calendar event time (locale): ' + slotStart.toLocaleTimeString());
           
           const slotEnd = new Date(slotStart);
           slotEnd.setMinutes(slotEnd.getMinutes() + duration);
@@ -240,7 +248,22 @@ function createMeetingsForSpecificNames(namesToProcess) {
       
       if (!meetingCreatedForName) {
         Logger.log('No available slots found for ' + name + ' in ' + weeksToSearch + ' weeks');
-        namesWithoutSlots++;
+        
+        // Create detailed error message explaining why no meeting could be scheduled
+        let errorMessage = `❌ MEETING CANNOT BE SCHEDULED\n\n`;
+        errorMessage += `Unable to find an available meeting slot for "${name}".\n\n`;
+        errorMessage += `REASONS:\n`;
+        errorMessage += `• Searched ${weeksToSearch} weeks ahead (based on recurring interval: ${recurringInterval} weeks)\n`;
+        errorMessage += `• All configured meeting slots are busy with existing calendar events\n`;
+        errorMessage += `• Total meeting slots configured: ${meetingSlots.length}\n\n`;
+        errorMessage += `SOLUTIONS:\n`;
+        errorMessage += `• Add more meeting slots to the Meeting Slots tab\n`;
+        errorMessage += `• Clear conflicts from your calendar during configured meeting times\n`;
+        errorMessage += `• Increase the recurring interval to search further ahead\n`;
+        errorMessage += `• Try again later when calendar availability changes`;
+        
+        Logger.log('Throwing error for no available slots: ' + errorMessage);
+        throw new Error(errorMessage);
       }
     }
     
@@ -250,7 +273,7 @@ function createMeetingsForSpecificNames(namesToProcess) {
       success: true,
       namesProcessed: namesToProcess.length,
       meetingsCreated: meetingsCreated,
-      namesWithoutSlots: namesWithoutSlots,
+      namesWithoutSlots: 0, // This will always be 0 now since we throw an error instead
       weeksCalculated: recurringInterval,
       createdMeetings: createdMeetings,
       errors: errors
@@ -379,11 +402,17 @@ function createAllRecurringMeetings() {
             continue;
           }
           
-          // Parse the time
-          const timeParts = slot.time.split(':');
-          const hour = parseInt(timeParts[0]);
-          const minute = parseInt(timeParts[1]);
+          // Parse the time using proper 24-hour format handling
+          Logger.log('Processing slot time: ' + slot.time);
+          const timeResult = parseTimeString(slot.time);
+          if (!timeResult) {
+            Logger.log('Invalid time format for slot: ' + slot.time);
+            continue;
+          }
+          const hour = timeResult.hours;
+          const minute = timeResult.minutes;
           const duration = parseInt(slot.duration);
+          Logger.log('Parsed time - hours: ' + hour + ', minutes: ' + minute);
           
           // Find the occurrence of this day in this specific week
           let currentDate = new Date(today);
@@ -397,6 +426,8 @@ function createAllRecurringMeetings() {
           // Create the start and end times for this potential slot
           const slotStart = new Date(currentDate);
           slotStart.setHours(hour, minute, 0, 0);
+          Logger.log('Setting calendar event time to: ' + slotStart.toString());
+          Logger.log('Calendar event time (locale): ' + slotStart.toLocaleTimeString());
           
           const slotEnd = new Date(slotStart);
           slotEnd.setMinutes(slotEnd.getMinutes() + duration);

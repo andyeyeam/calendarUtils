@@ -126,15 +126,14 @@ function getMeetingSlots() {
         // Format time properly if it's a Date object from Google Sheets
         let timeStr = row[1];
         if (row[1] instanceof Date) {
-          // Extract just the time portion and format as 12-hour time
+          // Extract just the time portion and format as 24-hour time to preserve accuracy
           const hours = row[1].getHours();
           const minutes = row[1].getMinutes();
-          const ampm = hours >= 12 ? 'PM' : 'AM';
-          const displayHours = hours % 12 || 12; // Convert 0 to 12 for 12 AM
-          const displayMinutes = minutes.toString().padStart(2, '0');
-          timeStr = `${displayHours}:${displayMinutes} ${ampm}`;
+          timeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+          Logger.log(`Converted Date object to 24-hour format: ${timeStr}`);
         } else {
           timeStr = String(row[1]).trim();
+          Logger.log(`Using string time value: ${timeStr}`);
         }
         
         const slot = {

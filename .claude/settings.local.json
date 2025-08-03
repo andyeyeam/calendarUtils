@@ -8,7 +8,8 @@
       "Bash(explorer:*)",
       "Bash(grep:*)",
       "Bash(start \"C:\\Users\\andre\\Repos\\calendarUtilities\\index.html\")",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(del \"C:\\Users\\andre\\Repos\\calendarUtilities\\TimeParsingTest.js\")"
     ],
     "deny": []
   }

@@ -1967,14 +1967,6 @@
                                 `Duration: ${meeting.duration} minutes\n` +
                                 `Recurring every: ${result.weeksCalculated} weeks\n` +
                                 `Week found: ${meeting.weekFound}`;
-                    } else if (result.success && result.namesWithoutSlots > 0) {
-                        message = `⚠️ NO AVAILABLE SLOTS FOUND\n\n` +
-                                `Could not find an available slot for "${nameToAdd}" in the next ${result.weeksCalculated} weeks.\n\n` +
-                                `This might be because:\n` +
-                                `• All meeting slots are busy\n` +
-                                `• No meeting slots are configured\n` +
-                                `• The search period is too short\n\n` +
-                                `Please check your calendar availability or meeting slot configuration.`;
                     } else {
                         message = `❌ MEETING CREATION FAILED\n\n` +
                                 `Errors encountered:\n${result.errors.join('\n')}`;
@@ -2002,7 +1994,7 @@
                     // Restore the names list
                     displayCurrentNames(cachedNamesWithEvents);
                     
-                    // Check if this is a recurring interval error and provide specific guidance
+                    // Check for specific error types and provide appropriate guidance
                     const errorMessage = error.message || error.toString();
                     if (errorMessage.includes('Recurring interval has not been defined')) {
                         alert('❌ RECURRING INTERVAL NOT DEFINED\n\n' +
@@ -2012,6 +2004,9 @@
                               '2. Go to the "Properties" tab\n' +
                               '3. Set the "Recurring Interval" value (1-26 weeks)\n' +
                               '4. Try creating the meeting again');
+                    } else if (errorMessage.includes('MEETING CANNOT BE SCHEDULED')) {
+                        // Display the detailed error message as-is since it already contains formatting and solutions
+                        alert(errorMessage);
                     } else {
                         alert('Error creating meeting: ' + errorMessage);
                     }

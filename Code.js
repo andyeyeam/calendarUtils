@@ -1,6 +1,6 @@
 // All backend service functions have been moved to separate service files:
 // - SheetService.js: Sheet management functions (getOrCreateStateSheet)
-// - CalendarService.js: Calendar operations (searchCalendarEventForName, debugCalendarEvents, checkSlotAvailability, getNextDateForDayOfWeek, parseSlotTime)
+// - CalendarService.js: Calendar operations (searchCalendarEventForName, debugCalendarEvents, checkSlotAvailability, getNextDateForDayOfWeek, parseSlotTime, parseTimeString)
 // - NamesService.js: Names management (saveSkipLevelNames, getSkipLevelNames, clearSkipLevelNames, removeSkipLevel, getNamesWithCalendarEvents, removeRecurringMeetingOnly, updateNameWithCalendarDetails)
 // - MeetingSlotsService.js: Meeting slots management (saveMeetingSlots, getMeetingSlots, clearMeetingSlots, getMeetingSlotsWithDates)
 // - PropertiesService.js: Properties management (saveProperty, getProperty, getRecurringInterval, setRecurringInterval, calculateOptimalRecurringInterval)
