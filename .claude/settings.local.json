@@ -6,7 +6,9 @@
       "Bash(rm:*)",
       "Bash(start index.html)",
       "Bash(explorer:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(start \"C:\\Users\\andre\\Repos\\calendarUtilities\\index.html\")",
+      "Bash(node:*)"
     ],
     "deny": []
   }

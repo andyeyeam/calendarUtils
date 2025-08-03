@@ -569,6 +569,22 @@
             z-index: 1000;
         }
         
+        /* Force z-index for any list items containing dropdowns */
+        .people-list-row .actions-dropdown {
+            z-index: 10000 !important;
+            position: relative !important;
+        }
+        
+        /* When dropdown is shown, boost parent z-index */
+        .actions-dropdown:has(.dropdown-content.show) {
+            z-index: 20000 !important;
+        }
+        
+        /* Alternative selector for browsers that don't support :has() */
+        .actions-dropdown.dropdown-active {
+            z-index: 20000 !important;
+        }
+        
         .actions-btn {
             background: linear-gradient(135deg, var(--secondary-500) 0%, var(--secondary-600) 100%);
             color: white;
@@ -599,7 +615,7 @@
             min-width: 180px;
             box-shadow: 0 4px 16px rgba(0,0,0,0.15);
             border-radius: 8px;
-            z-index: 9999;
+            z-index: 50000;
             right: 0;
             top: calc(100% + 4px);
             border: 1px solid var(--gray-200);
@@ -633,8 +649,10 @@
             border-bottom: none;
         }
         
-        .dropdown-item:hover {
+        .dropdown-item:hover,
+        .dropdown-item:focus {
             background-color: var(--gray-50);
+            outline: none;
         }
         
         .dropdown-item.add {
@@ -675,6 +693,39 @@
         /* Specific override for People list container */
         #currentNamesContent {
             overflow: visible !important;
+        }
+        
+        /* Mass Actions dropdown - highest z-index */
+        #actionsDropdown {
+            z-index: 99999 !important;
+            position: absolute !important;
+            background-color: white !important;
+            min-width: 180px !important;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.15) !important;
+            border-radius: 8px !important;
+            right: 0 !important;
+            top: calc(100% + 4px) !important;
+            border: 1px solid var(--gray-200) !important;
+            overflow: hidden !important;
+        }
+        
+        /* Force visibility when shown */
+        #actionsDropdown.show {
+            display: block !important;
+            opacity: 1 !important;
+            visibility: visible !important;
+        }
+        
+        /* Ensure Mass Actions button container has proper z-index context */
+        .card-header .actions-dropdown {
+            z-index: 10000 !important;
+            position: relative !important;
+        }
+        
+        /* Ensure all parent containers allow overflow */
+        .card, .card-header, .tab-content {
+            overflow: visible !important;
+            position: relative;
         }
     </style>
 </head>
@@ -786,13 +837,13 @@
                                     <span style="font-size: 0.625rem;">▼</span>
                                 </button>
                                 <div id="actionsDropdown" class="dropdown-content">
-                                    <div class="dropdown-item" onclick="refreshCurrentNames(); closeActionsDropdown();">
+                                    <div class="dropdown-item" tabindex="0" onclick="refreshCurrentNames(); closeActionsDropdown();" onkeydown="if(event.key==='Enter'||event.key===' '){refreshCurrentNames(); closeActionsDropdown(); event.preventDefault();}">
                                         <span>🔄</span> Refresh
                                     </div>
-                                    <div class="dropdown-item add" onclick="addAllMeetings(); closeActionsDropdown();">
+                                    <div class="dropdown-item add" tabindex="0" onclick="addAllMeetings(); closeActionsDropdown();" onkeydown="if(event.key==='Enter'||event.key===' '){addAllMeetings(); closeActionsDropdown(); event.preventDefault();}">
                                         <span>➕</span> Add Missing Meetings
                                     </div>
-                                    <div class="dropdown-item remove" onclick="deleteAllMeetings(); closeActionsDropdown();">
+                                    <div class="dropdown-item remove" tabindex="0" onclick="deleteAllMeetings(); closeActionsDropdown();" onkeydown="if(event.key==='Enter'||event.key===' '){deleteAllMeetings(); closeActionsDropdown(); event.preventDefault();}">
                                         <span>🗑️</span> Delete All
                                     </div>
                                 </div>
@@ -1148,8 +1199,21 @@
         }
         
         function toggleActionsDropdown() {
+            console.log('=== toggleActionsDropdown called ===');
             const dropdown = document.getElementById('actionsDropdown');
+            const button = document.querySelector('.card-header .actions-btn');
+            
+            if (!dropdown) {
+                console.error('actionsDropdown element not found!');
+                return;
+            }
+            
+            console.log('Found dropdown element:', dropdown);
+            console.log('Dropdown current classes:', dropdown.className);
+            console.log('Dropdown current style.display:', dropdown.style.display);
+            
             const allDropdowns = document.querySelectorAll('.dropdown-content');
+            console.log('Found', allDropdowns.length, 'total dropdowns');
             
             // Close all other dropdowns first
             allDropdowns.forEach(d => {
@@ -1159,13 +1223,136 @@
             });
             
             // Toggle this dropdown
+            const wasShowing = dropdown.classList.contains('show');
             dropdown.classList.toggle('show');
+            
+            console.log('Dropdown was showing:', wasShowing);
+            console.log('Dropdown now showing:', dropdown.classList.contains('show'));
+            console.log('Mass Actions dropdown now has classes:', dropdown.className);
+            
+            // Remove existing event listeners
+            removeMassActionsEventListeners();
+            
+            // Force visibility if showing
+            if (dropdown.classList.contains('show')) {
+                console.log('Forcing dropdown visibility...');
+                dropdown.style.display = 'block';
+                dropdown.style.opacity = '1';
+                dropdown.style.visibility = 'visible';
+                dropdown.style.zIndex = '99999';
+                
+                console.log('Mass Actions dropdown is now showing, adding event handlers');
+                
+                // Add click outside handler
+                setTimeout(() => {
+                    document.addEventListener('click', massActionsClickOutsideHandler);
+                }, 10);
+                
+                // Add focus handlers for better UX
+                document.addEventListener('focusin', massActionsFocusHandler);
+                document.addEventListener('keydown', massActionsKeyHandler);
+                
+                // Make dropdown focusable
+                dropdown.setAttribute('tabindex', '-1');
+                
+            } else {
+                console.log('Dropdown is now hidden');
+                removeMassActionsEventListeners();
+            }
+        }
+        
+        // Event handler functions for Mass Actions dropdown
+        function massActionsClickOutsideHandler(event) {
+            const dropdown = document.getElementById('actionsDropdown');
+            const button = document.querySelector('.card-header .actions-btn');
+            
+            console.log('Click outside detected, target:', event.target);
+            if (!dropdown.contains(event.target) && !button.contains(event.target)) {
+                console.log('Closing dropdown due to outside click');
+                closeActionsDropdown();
+                removeMassActionsEventListeners();
+            }
+        }
+        
+        function massActionsFocusHandler(event) {
+            const dropdown = document.getElementById('actionsDropdown');
+            const button = document.querySelector('.card-header .actions-btn');
+            
+            console.log('Focus changed to:', event.target);
+            // Close dropdown if focus moves outside the dropdown and button
+            if (!dropdown.contains(event.target) && !button.contains(event.target)) {
+                console.log('Closing dropdown due to focus change');
+                closeActionsDropdown();
+                removeMassActionsEventListeners();
+            }
+        }
+        
+        function massActionsKeyHandler(event) {
+            const dropdown = document.getElementById('actionsDropdown');
+            
+            // Close on Escape key
+            if (event.key === 'Escape') {
+                console.log('Closing dropdown due to Escape key');
+                closeActionsDropdown();
+                removeMassActionsEventListeners();
+                event.preventDefault();
+            }
+            
+            // Handle arrow key navigation within dropdown
+            if (dropdown.classList.contains('show') && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+                const items = dropdown.querySelectorAll('.dropdown-item');
+                const currentFocus = document.activeElement;
+                let currentIndex = Array.from(items).indexOf(currentFocus);
+                
+                if (event.key === 'ArrowDown') {
+                    currentIndex = currentIndex < items.length - 1 ? currentIndex + 1 : 0;
+                } else {
+                    currentIndex = currentIndex > 0 ? currentIndex - 1 : items.length - 1;
+                }
+                
+                items[currentIndex].focus();
+                event.preventDefault();
+            }
+        }
+        
+        function removeMassActionsEventListeners() {
+            document.removeEventListener('click', massActionsClickOutsideHandler);
+            document.removeEventListener('focusin', massActionsFocusHandler);
+            document.removeEventListener('keydown', massActionsKeyHandler);
         }
         
         function closeActionsDropdown() {
+            console.log('closeActionsDropdown called');
             const dropdown = document.getElementById('actionsDropdown');
             if (dropdown) {
                 dropdown.classList.remove('show');
+                console.log('Mass Actions dropdown closed');
+            }
+        }
+        
+        // Debug function to test dropdown manually
+        function debugActionsDropdown() {
+            console.log('=== DEBUG ACTIONS DROPDOWN ===');
+            const dropdown = document.getElementById('actionsDropdown');
+            if (dropdown) {
+                console.log('Dropdown element found');
+                console.log('Current classes:', dropdown.className);
+                console.log('Current computed style:', window.getComputedStyle(dropdown));
+                console.log('Parent element:', dropdown.parentElement);
+                console.log('Bounding rect:', dropdown.getBoundingClientRect());
+                
+                // Force show for testing
+                dropdown.classList.add('show');
+                dropdown.style.display = 'block';
+                dropdown.style.position = 'absolute';
+                dropdown.style.zIndex = '99999';
+                dropdown.style.backgroundColor = 'red'; // Make it very visible
+                dropdown.style.top = '100%';
+                dropdown.style.right = '0';
+                
+                console.log('Forced dropdown to show with red background');
+            } else {
+                console.error('Dropdown element not found!');
             }
         }
         
@@ -1433,16 +1620,16 @@
                                             <span style="font-size: 10px; margin-left: 4px;">▼</span>
                                         </button>
                                         <div id="dropdown-${escapeHtml(nameData.name).replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '')}" class="dropdown-content">
-                                            ${!nameData.found ? 
-                                                `<div class="dropdown-item add" onclick="addRecurringMeeting('${escapeHtml(nameData.name).replace(/'/g, "\\'")}')">
-                                                    <span>➕</span> Add Recurring Meeting
-                                                </div>` : 
+                                            ${nameData.found ? 
                                                 `<div class="dropdown-item remove-meeting" onclick="removeRecurringMeeting('${escapeHtml(nameData.name).replace(/'/g, "\\'")}')">
                                                     <span>📅❌</span> Remove Recurring Meeting
+                                                </div>` : 
+                                                `<div class="dropdown-item add-meeting" onclick="addRecurringMeeting('${escapeHtml(nameData.name).replace(/'/g, "\\'")}')">
+                                                    <span>📅➕</span> Add Recurring Meeting
                                                 </div>`
                                             }
                                             <div class="dropdown-item remove" onclick="removeIndividualName('${escapeHtml(nameData.name).replace(/'/g, "\\'")}')">
-                                                <span>🗑️</span> Remove
+                                                <span>🗑️</span> Remove person and recurring meeting
                                             </div>
                                         </div>
                                     </div>
@@ -1472,11 +1659,19 @@
         function toggleDropdown(name) {
             console.log('toggleDropdown called for name:', name);
             
-            // Close all other dropdowns first
+            // Close all other dropdowns first and reset their parent z-index
             const allDropdowns = document.querySelectorAll('.dropdown-content');
+            const allActionsDropdowns = document.querySelectorAll('.actions-dropdown');
             console.log('Found', allDropdowns.length, 'dropdowns total');
+            
             allDropdowns.forEach(dropdown => {
                 dropdown.classList.remove('show');
+            });
+            
+            // Reset all parent container z-index
+            allActionsDropdowns.forEach(container => {
+                container.classList.remove('dropdown-active');
+                container.style.zIndex = '';
             });
             
             // Generate the same ID as used in the HTML
@@ -1489,91 +1684,45 @@
                 dropdown.classList.toggle('show');
                 console.log('Dropdown now has classes:', dropdown.className);
                 
+                // Get the parent actions-dropdown container
+                const parentContainer = dropdown.closest('.actions-dropdown');
+                
                 // Add click outside to close functionality
                 if (dropdown.classList.contains('show')) {
-                    console.log('Dropdown is now showing, adding click outside handler');
+                    console.log('Dropdown is now showing, boosting parent z-index');
+                    
+                    // Boost parent container z-index
+                    if (parentContainer) {
+                        parentContainer.classList.add('dropdown-active');
+                        parentContainer.style.zIndex = '20000';
+                    }
+                    
+                    // Force dropdown z-index
+                    dropdown.style.zIndex = '50000';
+                    
                     setTimeout(() => {
                         document.addEventListener('click', function closeOnClickOutside(event) {
                             if (!dropdown.contains(event.target) && !event.target.closest('.actions-btn')) {
                                 dropdown.classList.remove('show');
+                                if (parentContainer) {
+                                    parentContainer.classList.remove('dropdown-active');
+                                    parentContainer.style.zIndex = '';
+                                }
                                 document.removeEventListener('click', closeOnClickOutside);
                             }
                         });
                     }, 10);
+                } else {
+                    // Reset parent z-index when closing
+                    if (parentContainer) {
+                        parentContainer.classList.remove('dropdown-active');
+                        parentContainer.style.zIndex = '';
+                    }
                 }
             } else {
                 console.error('Dropdown not found with ID:', dropdownId);
                 console.log('Available dropdown IDs:', Array.from(document.querySelectorAll('.dropdown-content')).map(d => d.id));
             }
-        }
-        
-        function addRecurringMeeting(name) {
-            // Close the dropdown
-            const dropdownId = 'dropdown-' + name.replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '');
-            const dropdown = document.getElementById(dropdownId);
-            if (dropdown) {
-                dropdown.classList.remove('show');
-            }
-            
-            console.log('Adding recurring meeting for:', name);
-            
-            // Show confirmation dialog
-            const confirmMessage = `Add a recurring meeting for "${name}"?\n\n` +
-                                 `This will:\n` +
-                                 `• Search for available meeting slots in your calendar\n` +
-                                 `• Create a recurring Skip Level meeting\n` +
-                                 `• Schedule meetings based on configured meeting slots\n\n` +
-                                 `Continue?`;
-            
-            if (!confirm(confirmMessage)) {
-                return;
-            }
-            
-            // Show loading state
-            document.getElementById('namesList').innerHTML = `
-                <div class="loading-container">
-                    <div class="spinner"></div>
-                    <p>Creating recurring meeting for "${name}"...</p>
-                    <div style="color: #6c757d; font-size: 12px; margin-top: 10px;">
-                        Calculating schedule and checking calendar availability
-                    </div>
-                </div>
-            `;
-            
-            // Call backend to create the recurring meeting
-            google.script.run
-                .withSuccessHandler(function(result) {
-                    console.log('Recurring meeting created successfully:', result);
-                    
-                    // Show success message
-                    let successMessage = `✓ Recurring meeting created successfully for "${name}"!\n\n`;
-                    
-                    if (result.meetingCreated) {
-                        successMessage += `Meeting Details:\n`;
-                        successMessage += `• Day: ${result.meetingDetails.dayOfWeek}\n`;
-                        successMessage += `• Time: ${result.meetingDetails.time}\n`;
-                        successMessage += `• Duration: ${result.meetingDetails.duration} minutes\n`;
-                        successMessage += `• Frequency: Every ${result.weeksCalculated} weeks\n`;
-                        successMessage += `• Title: Skip Level: ${name}`;
-                    } else {
-                        successMessage += `No available slots found in the next ${result.weeksCalculated} weeks.\n`;
-                        successMessage += `Please check your meeting slot configuration or calendar availability.`;
-                    }
-                    
-                    alert(successMessage);
-                    
-                    // Return to current names list and refresh to show updated calendar status
-                    cachedNamesWithEvents = null; // Clear cache to force calendar search
-                    loadCurrentNames();
-                })
-                .withFailureHandler(function(error) {
-                    console.error('Error creating recurring meeting:', error);
-                    alert('Error creating recurring meeting: ' + (error.message || error.toString()));
-                    
-                    // Refresh the names list on error
-                    loadCurrentNames();
-                })
-                .createRecurringMeeting(name);
         }
         
         function clearAllNames() {
@@ -1763,6 +1912,111 @@
                     })
                     .saveSkipLevelNames(updatedNames);
             }
+        }
+
+        function addRecurringMeeting(nameToAdd) {
+            console.log('Creating recurring meeting for:', nameToAdd);
+            
+            // Check if we're in Google Apps Script environment
+            if (typeof google === 'undefined' || !google.script) {
+                alert('This functionality requires Google Apps Script environment. Please deploy to Google Apps Script to test.');
+                return;
+            }
+            
+            // Show confirmation dialog
+            const confirmMessage = `📅 CREATE RECURRING MEETING 📅\n\n` +
+                                 `This will create a recurring Skip Level meeting for "${nameToAdd}".\n\n` +
+                                 `The system will:\n` +
+                                 `• Search for the first available slot based on configured meeting slots\n` +
+                                 `• Look ahead based on the Recurring Interval setting\n` +
+                                 `• Create a recurring meeting with title "Skip Level: ${nameToAdd}"\n` +
+                                 `• Schedule it to repeat every [Recurring Interval] weeks\n\n` +
+                                 `Do you want to proceed?`;
+            
+            if (!confirm(confirmMessage)) {
+                return;
+            }
+            
+            // Close the dropdown
+            const dropdownId = 'dropdown-' + nameToAdd.replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '');
+            const dropdown = document.getElementById(dropdownId);
+            if (dropdown) {
+                dropdown.classList.remove('show');
+            }
+            
+            // Show loading state
+            document.getElementById('namesList').innerHTML = `
+                <div class="loading-container">
+                    <div class="spinner"></div>
+                    <p>Creating recurring meeting for "${nameToAdd}"...</p>
+                </div>
+            `;
+            
+            // Call backend function to create meeting for this specific name
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    console.log('Meeting creation completed:', result);
+                    
+                    let message = '';
+                    if (result.success && result.meetingsCreated > 0) {
+                        const meeting = result.createdMeetings[0]; // Should be one meeting for this name
+                        message = `✅ MEETING CREATED SUCCESSFULLY!\n\n` +
+                                `Person: ${nameToAdd}\n` +
+                                `Day: ${meeting.dayOfWeek}\n` +
+                                `Time: ${meeting.time}\n` +
+                                `Duration: ${meeting.duration} minutes\n` +
+                                `Recurring every: ${result.weeksCalculated} weeks\n` +
+                                `Week found: ${meeting.weekFound}`;
+                    } else if (result.success && result.namesWithoutSlots > 0) {
+                        message = `⚠️ NO AVAILABLE SLOTS FOUND\n\n` +
+                                `Could not find an available slot for "${nameToAdd}" in the next ${result.weeksCalculated} weeks.\n\n` +
+                                `This might be because:\n` +
+                                `• All meeting slots are busy\n` +
+                                `• No meeting slots are configured\n` +
+                                `• The search period is too short\n\n` +
+                                `Please check your calendar availability or meeting slot configuration.`;
+                    } else {
+                        message = `❌ MEETING CREATION FAILED\n\n` +
+                                `Errors encountered:\n${result.errors.join('\n')}`;
+                    }
+                    
+                    alert(message);
+                    
+                    // Refresh the names list to show updated calendar status
+                    google.script.run
+                        .withSuccessHandler(function(refreshedNamesWithEvents) {
+                            console.log('Names list refreshed after meeting creation');
+                            cachedNamesWithEvents = refreshedNamesWithEvents;
+                            displayCurrentNames(refreshedNamesWithEvents);
+                        })
+                        .withFailureHandler(function(error) {
+                            console.error('Error refreshing names list:', error);
+                            // Still show the previous state
+                            displayCurrentNames(cachedNamesWithEvents);
+                            alert('Meeting may have been created, but there was an error refreshing the display: ' + (error.message || error.toString()));
+                        })
+                        .getNamesWithCalendarEvents();
+                })
+                .withFailureHandler(function(error) {
+                    console.error('Error creating meeting:', error);
+                    // Restore the names list
+                    displayCurrentNames(cachedNamesWithEvents);
+                    
+                    // Check if this is a recurring interval error and provide specific guidance
+                    const errorMessage = error.message || error.toString();
+                    if (errorMessage.includes('Recurring interval has not been defined')) {
+                        alert('❌ RECURRING INTERVAL NOT DEFINED\n\n' +
+                              'The "Recurring Interval" property has not been set in the Properties tab of the CalendarUtilities State Sheet.\n\n' +
+                              'To fix this:\n' +
+                              '1. Open the CalendarUtilities State Sheet\n' +
+                              '2. Go to the "Properties" tab\n' +
+                              '3. Set the "Recurring Interval" value (1-26 weeks)\n' +
+                              '4. Try creating the meeting again');
+                    } else {
+                        alert('Error creating meeting: ' + errorMessage);
+                    }
+                })
+                .createMeetingsForSpecificNames([nameToAdd]);
         }
         
         function removeRecurringMeeting(nameToRemove) {
@@ -2142,7 +2396,14 @@
             
             // Load tab-specific data
             if (tabName === 'properties') {
+                // Always load properties to ensure fresh data
+                console.log('Properties tab selected, loading current properties...');
                 loadCurrentProperties();
+            } else if (tabName === 'currentNames') {
+                // Load current names if cache is not valid
+                if (!isCacheValid()) {
+                    loadCurrentNames();
+                }
             }
         }
         
@@ -2153,6 +2414,20 @@
             
             if (!recurringIntervalInput) {
                 console.error('Recurring interval input field not found');
+                // Try again after a short delay in case DOM is still loading
+                setTimeout(() => {
+                    const retryInput = document.getElementById('recurringIntervalInput');
+                    if (retryInput) {
+                        console.log('Retrying properties load after DOM update');
+                        loadCurrentProperties();
+                    }
+                }, 100);
+                return;
+            }
+            
+            // Check if already loaded (avoid duplicate loads)
+            if (recurringIntervalInput.value && recurringIntervalInput.value !== '' && recurringIntervalInput.placeholder !== 'Loading...') {
+                console.log('Properties already loaded, skipping reload');
                 return;
             }
             
@@ -2166,7 +2441,7 @@
                 .withSuccessHandler(function(propertyResult) {
                     console.log('Google Sheet Properties tab accessed. Result:', propertyResult);
                     
-                    let finalValue = 8; // Default fallback
+                    let finalValue = null;
                     
                     if (propertyResult && propertyResult.found && propertyResult.value !== null && propertyResult.value !== undefined) {
                         const sheetValue = parseInt(propertyResult.value);
@@ -2174,33 +2449,33 @@
                             finalValue = sheetValue;
                             console.log(`SUCCESS: Read Recurring Interval from Google Sheet Properties tab: ${finalValue}`);
                         } else {
-                            console.log(`Invalid value in Google Sheet (${propertyResult.value}), using default: 8`);
+                            console.log(`Invalid value in Google Sheet (${propertyResult.value}), leaving field empty for user input`);
                         }
                     } else {
-                        console.log('Recurring Interval property not found in Google Sheet Properties tab, using default: 8');
+                        console.log('Recurring Interval property not found in Google Sheet Properties tab, leaving field empty for user input');
                     }
                     
-                    // Update the input field with the value from Google Sheet
-                    recurringIntervalInput.value = finalValue;
-                    recurringIntervalInput.placeholder = '';
+                    // Update the input field with the value from Google Sheet or leave empty
+                    recurringIntervalInput.value = finalValue !== null ? finalValue : '';
+                    recurringIntervalInput.placeholder = finalValue !== null ? '' : 'Enter weeks (1-26)';
                     recurringIntervalInput.disabled = false;
                     
-                    // Validate the value
-                    validateRecurringInterval();
+                    // Validate the value if one was loaded
+                    if (finalValue !== null) {
+                        validateRecurringInterval();
+                    }
                     
-                    console.log(`Recurring Interval input field populated with value: ${finalValue}`);
+                    console.log(`Recurring Interval input field populated with value: ${finalValue !== null ? finalValue : 'empty'}`);
                 })
                 .withFailureHandler(function(error) {
                     console.error('FAILED to read from Google Sheet Properties tab:', error);
                     
-                    // Use default value on failure
-                    recurringIntervalInput.value = 8;
-                    recurringIntervalInput.placeholder = '';
+                    // Leave field empty on failure so user can input their own value
+                    recurringIntervalInput.value = '';
+                    recurringIntervalInput.placeholder = 'Enter weeks (1-26)';
                     recurringIntervalInput.disabled = false;
                     
-                    validateRecurringInterval();
-                    
-                    console.log('Using default Recurring Interval value: 8');
+                    console.log('Google Sheet access failed, leaving field empty for user input');
                 })
                 .getProperty('Recurring Interval');
         }
