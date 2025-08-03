@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Andy's Calendar Utilities - Simple Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .button {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            width: 100%;
+            margin: 10px 0;
+            font-size: 16px;
+        }
+        .button:hover {
+            background: #1d4ed8;
+        }
+        .button.secondary {
+            background: #6b7280;
+        }
+        .names-list {
+            margin-top: 20px;
+        }
+        .name-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            border: 1px solid #e5e7eb;
+            margin: 5px 0;
+            border-radius: 5px;
+        }
+        .has-meeting {
+            background: #f0fdf4;
+            border-color: #10b981;
+        }
+        .no-meeting {
+            background: #fef2f2;
+            border-color: #ef4444;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Andy's Calendar Utilities</h1>
+        
+        <button class="button" onclick="showSkipLevels()">
+            Skip Levels
+        </button>
+        
+        <button class="button secondary" onclick="testJavaScript()">
+            Test JavaScript
+        </button>
+        
+        <div id="content"></div>
+    </div>
+
+    <script>
+        // Development mode flag
+        var DEV_MODE = true;
+        
+        // Mock data
+        var mockData = [
+            {
+                name: "John Smith",
+                found: true,
+                eventId: "mock_event_1",
+                eventTitle: "Skip Level: John Smith",
+                calendarLink: "https://calendar.google.com/calendar/u/0/r/day/2024/1/15",
+                nextOccurrence: "1/15/2024 2:00:00 PM"
+            },
+            {
+                name: "Sarah Johnson",
+                found: false,
+                eventId: null,
+                eventTitle: null,
+                calendarLink: null,
+                nextOccurrence: null
+            },
+            {
+                name: "Mike Wilson",
+                found: true,
+                eventId: "mock_event_2",
+                eventTitle: "Skip Level: Mike Wilson",
+                calendarLink: "https://calendar.google.com/calendar/u/0/r/day/2024/1/22",
+                nextOccurrence: "1/22/2024 10:00:00 AM"
+            },
+            {
+                name: "Emily Davis",
+                found: false,
+                eventId: null,
+                eventTitle: null,
+                calendarLink: null,
+                nextOccurrence: null
+            }
+        ];
+        
+        function testJavaScript() {
+            alert('JavaScript is working! DEV_MODE = ' + DEV_MODE);
+            console.log('Test function called successfully');
+        }
+        
+        function showSkipLevels() {
+            console.log('Skip Levels button clicked');
+            
+            var content = document.getElementById('content');
+            var html = '<h2>Skip Levels</h2>';
+            html += '<button class="button secondary" onclick="goBackToMenu()">Back to Menu</button>';
+            html += '<div class="names-list">';
+            
+            for (var i = 0; i < mockData.length; i++) {
+                var person = mockData[i];
+                var cssClass = person.found ? 'has-meeting' : 'no-meeting';
+                var status = person.found ? 'Has Meeting' : 'No Meeting';
+                
+                html += '<div class="name-item ' + cssClass + '">';
+                html += '<span><strong>' + person.name + '</strong> - ' + status + '</span>';
+                html += '<div>';
+                
+                if (!person.found) {
+                    html += '<button onclick="addMeeting(\'' + person.name + '\')" style="margin-right: 5px;">Add Meeting</button>';
+                } else {
+                    html += '<button onclick="removeMeeting(\'' + person.name + '\')" style="margin-right: 5px;">Remove Meeting</button>';
+                }
+                
+                html += '<button onclick="removePerson(\'' + person.name + '\')">Remove Person</button>';
+                html += '</div>';
+                html += '</div>';
+            }
+            
+            html += '</div>';
+            content.innerHTML = html;
+        }
+        
+        function goBackToMenu() {
+            var content = document.getElementById('content');
+            content.innerHTML = '';
+        }
+        
+        function addMeeting(name) {
+            alert('Adding meeting for: ' + name);
+            // Update mock data
+            for (var i = 0; i < mockData.length; i++) {
+                if (mockData[i].name === name) {
+                    mockData[i].found = true;
+                    mockData[i].eventId = "new_mock_event";
+                    mockData[i].eventTitle = "Skip Level: " + name;
+                    mockData[i].calendarLink = "https://calendar.google.com/calendar/u/0/r/day/2024/2/1";
+                    mockData[i].nextOccurrence = "2/1/2024 2:00:00 PM";
+                    break;
+                }
+            }
+            showSkipLevels(); // Refresh the display
+        }
+        
+        function removeMeeting(name) {
+            alert('Removing meeting for: ' + name);
+            // Update mock data
+            for (var i = 0; i < mockData.length; i++) {
+                if (mockData[i].name === name) {
+                    mockData[i].found = false;
+                    mockData[i].eventId = null;
+                    mockData[i].eventTitle = null;
+                    mockData[i].calendarLink = null;
+                    mockData[i].nextOccurrence = null;
+                    break;
+                }
+            }
+            showSkipLevels(); // Refresh the display
+        }
+        
+        function removePerson(name) {
+            alert('Removing person: ' + name);
+            // Remove from mock data
+            for (var i = 0; i < mockData.length; i++) {
+                if (mockData[i].name === name) {
+                    mockData.splice(i, 1);
+                    break;
+                }
+            }
+            showSkipLevels(); // Refresh the display
+        }
+        
+        // Test that JavaScript loaded
+        console.log('Simple test script loaded successfully');
+    </script>
+</body>
+</html>

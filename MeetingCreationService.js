@@ -558,6 +558,152 @@ function createAllRecurringMeetings() {
   }
 }
 
+function removeAllRecurringMeetingsOnly() {
+  Logger.log('Removing all recurring meetings while keeping names in the list');
+  
+  try {
+    // Get all loaded names
+    const allNames = getSkipLevelNames();
+    if (allNames.length === 0) {
+      Logger.log('No names loaded');
+      return {
+        success: true,
+        totalNames: 0,
+        meetingsDeleted: 0,
+        namesProcessed: 0,
+        errors: []
+      };
+    }
+    
+    Logger.log('Processing ' + allNames.length + ' names for meeting deletion');
+    
+    // Get the default calendar
+    const calendar = CalendarApp.getDefaultCalendar();
+    
+    // Use 1 year range to find all recurring events
+    const today = new Date();
+    const oneYearAhead = new Date();
+    oneYearAhead.setFullYear(today.getFullYear() + 1);
+    
+    // Get all events in the date range
+    const allEvents = calendar.getEvents(today, oneYearAhead);
+    Logger.log('Total events found for deletion search: ' + allEvents.length);
+    
+    let meetingsDeleted = 0;
+    let namesProcessed = 0;
+    const errors = [];
+    
+    // Process each person individually
+    for (const name of allNames) {
+      Logger.log('=== Processing person: ' + name + ' ===');
+      
+      // Check if this person has a calendar link (meeting already scheduled)
+      const nameData = getNamesWithCalendarEvents().find(n => n.name === name);
+      if (!nameData || !nameData.found) {
+        Logger.log('No calendar link found for ' + name + ', skipping');
+        continue;
+      }
+      
+      namesProcessed++;
+      Logger.log('Found calendar link for ' + name + ', searching for events');
+      
+      // Find events with title "Skip Level:" + person name
+      const skipLevelEvents = allEvents.filter(event => {
+        const title = event.getTitle();
+        return title && title === 'Skip Level: ' + name;
+      });
+      
+      Logger.log('Found ' + skipLevelEvents.length + ' events for ' + name);
+      
+      if (skipLevelEvents.length === 0) {
+        Logger.log('No Skip Level events found for ' + name);
+        continue;
+      }
+      
+      // Group events by series ID to avoid deleting the same series multiple times
+      const eventSeriesMap = new Map(); // seriesId -> eventSeries
+      const singleEventsToDelete = []; // Non-recurring events
+      
+      skipLevelEvents.forEach(event => {
+        const title = event.getTitle();
+        Logger.log('Processing event for ' + name + ': "' + title + '"');
+        
+        try {
+          const eventSeries = event.getEventSeries();
+          if (eventSeries) {
+            // This is a recurring event
+            const seriesId = eventSeries.getId();
+            if (!eventSeriesMap.has(seriesId)) {
+              eventSeriesMap.set(seriesId, eventSeries);
+              Logger.log('Added recurring series for deletion: ' + title);
+            }
+          } else {
+            // This is a single event
+            singleEventsToDelete.push(event);
+            Logger.log('Added single event for deletion: ' + title);
+          }
+        } catch (error) {
+          Logger.log('Error processing event "' + title + '" for ' + name + ': ' + error.toString());
+        }
+      });
+      
+      // Delete recurring event series for this person
+      for (const [seriesId, eventSeries] of eventSeriesMap) {
+        try {
+          Logger.log('Deleting recurring series for ' + name);
+          eventSeries.deleteEventSeries();
+          meetingsDeleted++;
+          Logger.log('Successfully deleted recurring series for ' + name);
+        } catch (error) {
+          const errorMsg = 'Failed to delete recurring series for "' + name + '": ' + error.message;
+          Logger.log(errorMsg);
+          errors.push(errorMsg);
+        }
+      }
+      
+      // Delete single events for this person
+      singleEventsToDelete.forEach(event => {
+        try {
+          Logger.log('Deleting single event for ' + name);
+          event.deleteEvent();
+          meetingsDeleted++;
+          Logger.log('Successfully deleted single event for ' + name);
+        } catch (error) {
+          const errorMsg = 'Failed to delete single event for "' + name + '": ' + error.message;
+          Logger.log(errorMsg);
+          errors.push(errorMsg);
+        }
+      });
+      
+      // Update Google Sheet to remove calendar event details for this person
+      try {
+        Logger.log('Updating Google Sheet to remove calendar details for ' + name);
+        // Remove calendar event details but keep the name in the list
+        removeRecurringMeetingOnly(name);
+        Logger.log('Successfully updated Google Sheet for ' + name);
+      } catch (updateError) {
+        const errorMsg = 'Failed to update Google Sheet for "' + name + '": ' + updateError.message;
+        Logger.log(errorMsg);
+        errors.push(errorMsg);
+      }
+    }
+    
+    Logger.log('Recurring meetings removal completed. Names processed: ' + namesProcessed + ', Meetings deleted: ' + meetingsDeleted + ', Errors: ' + errors.length);
+    
+    return {
+      success: true,
+      totalNames: allNames.length,
+      meetingsDeleted: meetingsDeleted,
+      namesProcessed: namesProcessed,
+      errors: errors
+    };
+    
+  } catch (error) {
+    Logger.log('Error in removeAllRecurringMeetingsOnly: ' + error.toString());
+    throw new Error('Failed to remove all recurring meetings: ' + error.message);
+  }
+}
+
 function deleteAllRecurringMeetings() {
   Logger.log('Deleting all recurring meetings');
   
