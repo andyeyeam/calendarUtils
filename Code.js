@@ -154,10 +154,11 @@ function searchCalendarEventForName(name) {
             // This is a recurring event
             const eventId = eventSeries.getId();
             const eventStartTime = event.getStartTime();
-            const calendarLink = 'https://calendar.google.com/calendar/u/0/r/day/' + 
-                                eventStartTime.getFullYear() + '/' + 
-                                (eventStartTime.getMonth() + 1) + '/' + 
-                                eventStartTime.getDate();
+            // Format date for Google Calendar day view URL: YYYY/M/D
+            const year = eventStartTime.getFullYear();
+            const month = eventStartTime.getMonth() + 1; // JavaScript months are 0-based
+            const day = eventStartTime.getDate();
+            const calendarLink = `https://calendar.google.com/calendar/u/0/r/day/${year}/${month}/${day}`;
             // Format date/time without timezone abbreviation
             const dateStr = eventStartTime.toLocaleDateString();
             const timeStr = eventStartTime.toLocaleTimeString().replace(/\s*\([^)]*\)/, '');
@@ -649,40 +650,39 @@ function createRecurringMeeting(nameForMeeting) {
     
     Logger.log('Total names: ' + allNames.length);
     Logger.log('Total meeting slots: ' + meetingSlots.length);
+    Logger.log('Meeting slots data: ' + JSON.stringify(meetingSlots));
     
     if (meetingSlots.length === 0) {
       throw new Error('No meeting slots configured. Please configure meeting slots first.');
     }
     
-    // Calculate X weeks: max of 8 or (total names / total meeting slots) rounded up
-    const calculatedWeeks = Math.ceil(allNames.length / meetingSlots.length);
-    const weeksToSearch = Math.max(8, calculatedWeeks);
+    // Get the recurring interval from the Properties tab
+    const recurringInterval = getRecurringInterval();
+    const weeksToSearch = recurringInterval;
     
-    Logger.log('Calculated weeks based on names/slots: ' + calculatedWeeks);
-    Logger.log('Final weeks to search (max of 8 or calculated): ' + weeksToSearch);
+    Logger.log('Using recurring interval from Properties: ' + recurringInterval + ' weeks');
+    Logger.log('Weeks to search for available slot: ' + weeksToSearch);
     
     // Get the default calendar
     const calendar = CalendarApp.getDefaultCalendar();
     
     // Calculate search date range
-    const today = new Date();
+    const now = new Date();
     const endDate = new Date();
-    endDate.setDate(today.getDate() + (weeksToSearch * 7));
+    endDate.setDate(now.getDate() + (weeksToSearch * 7));
     
-    Logger.log('Search range: ' + today.toString() + ' to ' + endDate.toString());
+    Logger.log('Search range: ' + now.toString() + ' to ' + endDate.toString());
+    Logger.log('Will search for available slots in the next ' + weeksToSearch + ' weeks');
     
     // Get all events in the search period to check for conflicts
-    const existingEvents = calendar.getEvents(today, endDate);
+    const existingEvents = calendar.getEvents(now, endDate);
     Logger.log('Found ' + existingEvents.length + ' existing events in search period');
     
-    // Search for first available slot by checking all meeting slots in each week
-    for (let weekCount = 0; weekCount < weeksToSearch; weekCount++) {
-      Logger.log('=== Checking Week ' + (weekCount + 1) + ' of ' + weeksToSearch + ' ===');
-      
-      // Try all meeting slots in this week
+    // Create array of all possible future slots to check chronologically
+    const allPossibleSlots = [];
+    
+    for (let weekOffset = 0; weekOffset < weeksToSearch; weekOffset++) {
       for (const slot of meetingSlots) {
-        Logger.log('Checking slot in week ' + (weekCount + 1) + ': ' + JSON.stringify(slot));
-        
         // Get the day of week index (0 = Sunday, 1 = Monday, etc.)
         const dayMap = {
           'Sunday': 0, 'Monday': 1, 'Tuesday': 2, 'Wednesday': 3, 
@@ -695,98 +695,217 @@ function createRecurringMeeting(nameForMeeting) {
           continue;
         }
         
-        // Parse the time
-        const timeParts = slot.time.split(':');
+        // Parse the time with validation - handle different time formats
+        let timeString = slot.time;
+        
+        if (!timeString) {
+          Logger.log('Missing time value in slot: ' + JSON.stringify(slot));
+          continue;
+        }
+        
+        // Convert to string if it's not already
+        timeString = String(timeString).trim();
+        
+        // If it's a Date object from Google Sheets, extract time portion
+        if (timeString.includes('T') || timeString.includes('GMT') || timeString.length > 10) {
+          try {
+            const dateObj = new Date(timeString);
+            if (!isNaN(dateObj.getTime())) {
+              const hours = dateObj.getHours().toString().padStart(2, '0');
+              const minutes = dateObj.getMinutes().toString().padStart(2, '0');
+              timeString = hours + ':' + minutes;
+              Logger.log('Converted date to time format: ' + timeString);
+            }
+          } catch (e) {
+            Logger.log('Failed to parse as date: ' + timeString);
+          }
+        }
+        
+        const timeParts = timeString.split(':');
+        if (timeParts.length < 2) {
+          Logger.log('Time format must be HH:MM, got: ' + timeString + ' from original: ' + slot.time);
+          continue;
+        }
+        
         const hour = parseInt(timeParts[0]);
         const minute = parseInt(timeParts[1]);
         const duration = parseInt(slot.duration);
         
-        // Find the occurrence of this day in this specific week
-        let currentDate = new Date(today);
-        currentDate.setDate(today.getDate() + (weekCount * 7)); // Move to the target week
-        
-        // Move to the target day of the week within this week
-        while (currentDate.getDay() !== targetDayOfWeek) {
-          currentDate.setDate(currentDate.getDate() + 1);
+        // Validate parsed values
+        if (isNaN(hour) || isNaN(minute) || isNaN(duration)) {
+          Logger.log('Failed to parse time/duration - Hour: ' + hour + ', Minute: ' + minute + ', Duration: ' + duration + ' from slot: ' + JSON.stringify(slot));
+          continue;
         }
         
-        // Create the start and end times for this potential slot
-        const slotStart = new Date(currentDate);
+        if (hour < 0 || hour > 23 || minute < 0 || minute > 59 || duration <= 0) {
+          Logger.log('Invalid time values - Hour: ' + hour + ', Minute: ' + minute + ', Duration: ' + duration);
+          continue;
+        }
+        
+        // Calculate the exact date for this slot in this week
+        const weekStartDate = new Date(now);
+        weekStartDate.setDate(now.getDate() + (weekOffset * 7));
+        
+        // Move to the beginning of this week (Sunday)
+        const daysFromSunday = weekStartDate.getDay();
+        weekStartDate.setDate(weekStartDate.getDate() - daysFromSunday);
+        
+        // Move to the target day of the week
+        const slotDate = new Date(weekStartDate);
+        slotDate.setDate(weekStartDate.getDate() + targetDayOfWeek);
+        
+        // Set the time
+        const slotStart = new Date(slotDate);
         slotStart.setHours(hour, minute, 0, 0);
+        
+        // Validate the slot start time
+        if (isNaN(slotStart.getTime())) {
+          Logger.log('Invalid slot start time created');
+          continue;
+        }
         
         const slotEnd = new Date(slotStart);
         slotEnd.setMinutes(slotEnd.getMinutes() + duration);
         
-        // Skip if the slot is in the past
-        if (slotStart <= new Date()) {
-          Logger.log('Skipping past slot: ' + slotStart.toString());
+        // Validate the slot end time
+        if (isNaN(slotEnd.getTime())) {
+          Logger.log('Invalid slot end time created');
           continue;
         }
         
-        // Check if this slot is beyond our search range
+        // Only include future slots
+        if (slotStart <= now) {
+          continue;
+        }
+        
+        // Only include slots within our search range
         if (slotStart > endDate) {
-          Logger.log('Slot is beyond search range: ' + slotStart.toString());
           continue;
         }
         
-        Logger.log('Checking availability for: ' + slot.dayOfWeek + ' ' + slotStart.toDateString() + ' at ' + slot.time + ' (Week ' + (weekCount + 1) + ')');
+        allPossibleSlots.push({
+          slotStart,
+          slotEnd,
+          slot,
+          weekOffset: weekOffset + 1
+        });
+      }
+    }
+    
+    // Sort slots chronologically
+    allPossibleSlots.sort((a, b) => a.slotStart.getTime() - b.slotStart.getTime());
+    
+    Logger.log('Found ' + allPossibleSlots.length + ' possible future slots to check');
+    
+    // Check each slot for availability
+    for (const possibleSlot of allPossibleSlots) {
+      const { slotStart, slotEnd, slot, weekOffset } = possibleSlot;
+      
+      Logger.log('Checking availability for: ' + slot.dayOfWeek + ' ' + slotStart.toDateString() + ' at ' + slot.time + ' (Week ' + weekOffset + ')');
+      
+      // Check for time overlap with existing events
+      let hasConflict = false;
+      for (const event of existingEvents) {
+        const eventStart = event.getStartTime();
+        const eventEnd = event.getEndTime();
         
-        // Check for time overlap with existing events
-        let hasConflict = false;
-        for (const event of existingEvents) {
-          const eventStart = event.getStartTime();
-          const eventEnd = event.getEndTime();
-          
-          // Check for time overlap
-          if ((slotStart < eventEnd && slotEnd > eventStart)) {
-            hasConflict = true;
-            Logger.log('Conflict found with event: ' + event.getTitle() + ' at ' + eventStart.toString());
-            break;
-          }
-        }
-        
-        // If no conflict, create the recurring event
-        if (!hasConflict) {
-          Logger.log('Available slot found: ' + slot.dayOfWeek + ' ' + currentDate.toDateString() + ' at ' + slot.time + ' (Week ' + (weekCount + 1) + ' of ' + weeksToSearch + ')');
-          
-          const eventTitle = 'Skip Level: ' + trimmedName;
-          
-          Logger.log('Creating recurring event: ' + eventTitle);
-          Logger.log('Start time: ' + slotStart.toString());
-          Logger.log('End time: ' + slotEnd.toString());
-          Logger.log('Recurrence: Every ' + weeksToSearch + ' weeks');
-          
-          // Create the recurring event
-          const recurringEvent = calendar.createEventSeries(
-            eventTitle,
-            slotStart,
-            slotEnd,
-            CalendarApp.newRecurrence().addWeeklyRule().interval(weeksToSearch)
-          );
-          
-          Logger.log('Successfully created recurring event series with ID: ' + recurringEvent.getId());
-          
-          return {
-            success: true,
-            meetingCreated: true,
-            weeksCalculated: weeksToSearch,
-            meetingDetails: {
-              dayOfWeek: slot.dayOfWeek,
-              time: slot.time,
-              duration: slot.duration,
-              startDateTime: slotStart.toISOString(),
-              endDateTime: slotEnd.toISOString(),
-              title: eventTitle,
-              weekFound: weekCount + 1
-            },
-            recurringEventId: recurringEvent.getId()
-          };
-        } else {
-          Logger.log('Conflict found for ' + slot.dayOfWeek + ' at ' + slot.time + ' in week ' + (weekCount + 1) + ', trying next slot in this week...');
+        // Check for time overlap
+        if ((slotStart < eventEnd && slotEnd > eventStart)) {
+          hasConflict = true;
+          Logger.log('Conflict found with event: ' + event.getTitle() + ' at ' + eventStart.toString());
+          break;
         }
       }
       
-      Logger.log('No available slots found in week ' + (weekCount + 1) + ', moving to next week...');
+      // If no conflict, create the recurring event
+      if (!hasConflict) {
+        Logger.log('Available slot found: ' + slot.dayOfWeek + ' ' + slotStart.toDateString() + ' at ' + slot.time + ' (Week ' + weekOffset + ' of ' + weeksToSearch + ')');
+        
+        const eventTitle = 'Skip Level: ' + trimmedName;
+        
+        Logger.log('Creating recurring event: ' + eventTitle);
+        Logger.log('Start time: ' + slotStart.toString());
+        Logger.log('End time: ' + slotEnd.toString());
+        Logger.log('Recurrence: Every ' + recurringInterval + ' weeks');
+        
+        // Create the recurring event
+        const recurringEvent = calendar.createEventSeries(
+          eventTitle,
+          slotStart,
+          slotEnd,
+          CalendarApp.newRecurrence().addWeeklyRule().interval(recurringInterval)
+        );
+        
+        Logger.log('Successfully created recurring event series with ID: ' + recurringEvent.getId());
+        
+        // Update the Google Sheet Names tab with the calendar event details
+        try {
+          const { sheet, namesTab, meetingSlotsTab, propertiesTab } = getOrCreateStateSheet();
+          
+          // Find the row with this name
+          const lastRow = namesTab.getLastRow();
+          if (lastRow > 1) {
+            const nameRange = namesTab.getRange(2, 1, lastRow - 1, 7); // Get all data starting from row 2
+            const allData = nameRange.getValues();
+            
+            // Find the row index for this name
+            let targetRowIndex = -1;
+            for (let i = 0; i < allData.length; i++) {
+              if (allData[i][0] && String(allData[i][0]).trim().toLowerCase() === trimmedName.toLowerCase()) {
+                targetRowIndex = i + 2; // +2 because we started from row 2 and need 1-based index
+                break;
+              }
+            }
+            
+            if (targetRowIndex > 0) {
+              Logger.log('Found name "' + trimmedName + '" at row ' + targetRowIndex + ', updating calendar details');
+              
+              // Generate calendar link to the day view instead of specific event
+              // Format date for Google Calendar day view URL: YYYY/M/D
+              const year = slotStart.getFullYear();
+              const month = slotStart.getMonth() + 1; // JavaScript months are 0-based
+              const day = slotStart.getDate();
+              const calendarLink = `https://calendar.google.com/calendar/u/0/r/day/${year}/${month}/${day}`;
+              
+              // Calculate next occurrence date
+              const nextOccurrenceDate = slotStart.toLocaleDateString() + ' ' + slotStart.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+              
+              // Update the calendar-related columns
+              namesTab.getRange(targetRowIndex, 3).setValue('Active'); // Status
+              namesTab.getRange(targetRowIndex, 4).setValue(recurringEvent.getId()); // Calendar Event ID
+              namesTab.getRange(targetRowIndex, 5).setValue(eventTitle); // Event Title
+              namesTab.getRange(targetRowIndex, 6).setValue(calendarLink); // Calendar Link
+              namesTab.getRange(targetRowIndex, 7).setValue(nextOccurrenceDate); // Next Occurrence
+              
+              Logger.log('Updated Google Sheet Names tab for "' + trimmedName + '" with calendar event details');
+            } else {
+              Logger.log('Warning: Could not find name "' + trimmedName + '" in Names tab to update calendar details');
+            }
+          }
+        } catch (updateError) {
+          Logger.log('Error updating Google Sheet Names tab: ' + updateError.toString());
+          // Don't fail the entire operation if sheet update fails
+        }
+        
+        return {
+          success: true,
+          meetingCreated: true,
+          weeksToSearch: weeksToSearch,
+          recurringInterval: recurringInterval,
+          meetingDetails: {
+            dayOfWeek: slot.dayOfWeek,
+            time: slot.time,
+            duration: slot.duration,
+            startDateTime: slotStart.toISOString(),
+            endDateTime: slotEnd.toISOString(),
+            title: eventTitle,
+            weekFound: weekOffset
+          },
+          recurringEventId: recurringEvent.getId()
+        };
+      } else {
+        Logger.log('Conflict found for ' + slot.dayOfWeek + ' at ' + slot.time + ' in week ' + weekOffset + ', trying next available slot...');
+      }
     }
     
     // No available slots found
@@ -795,7 +914,8 @@ function createRecurringMeeting(nameForMeeting) {
     return {
       success: true,
       meetingCreated: false,
-      weeksCalculated: weeksToSearch,
+      weeksToSearch: weeksToSearch,
+      recurringInterval: recurringInterval,
       message: 'No available slots found in the next ' + weeksToSearch + ' weeks'
     };
     
@@ -1477,16 +1597,36 @@ function getProperty(propertyName) {
     
     const { sheet, namesTab, meetingSlotsTab, propertiesTab } = getOrCreateStateSheet();
     
-    // Get all data and find the property
-    const data = propertiesTab.getDataRange().getValues();
+    // Check if Properties tab has any data
+    const lastRow = propertiesTab.getLastRow();
+    const lastCol = propertiesTab.getLastColumn();
     
+    Logger.log(`Properties tab has ${lastRow} rows and ${lastCol} columns`);
+    
+    if (lastRow < 2) {
+      Logger.log('Properties tab has no data rows, property not found');
+      return {
+        found: false,
+        value: null,
+        description: null,
+        lastUpdated: null
+      };
+    }
+    
+    // Get all data and find the property
+    const data = propertiesTab.getRange(1, 1, lastRow, Math.max(lastCol, 4)).getValues();
+    Logger.log(`Retrieved data from Properties tab: ${data.length} rows`);
+    
+    // Log all properties for debugging
     for (let i = 1; i < data.length; i++) {
+      Logger.log(`Row ${i + 1}: Property="${data[i][0]}", Value="${data[i][1]}"`);
+      
       if (data[i][0] === propertyName) {
         const value = data[i][1];
         const description = data[i][2];
         const lastUpdated = data[i][3];
         
-        Logger.log(`Found property ${propertyName} with value: ${value}`);
+        Logger.log(`Found property ${propertyName} with value: ${value} (type: ${typeof value})`);
         return {
           found: true,
           value: value,
@@ -1496,7 +1636,7 @@ function getProperty(propertyName) {
       }
     }
     
-    Logger.log(`Property ${propertyName} not found`);
+    Logger.log(`Property ${propertyName} not found in Properties tab`);
     return {
       found: false,
       value: null,
@@ -1570,5 +1710,175 @@ function setRecurringInterval(weeks) {
   } catch (error) {
     Logger.log('Error in setRecurringInterval: ' + error.toString());
     throw new Error('Failed to set recurring interval: ' + error.message);
+  }
+}
+
+
+function calculateOptimalRecurringInterval() {
+  Logger.log('Calculating optimal recurring interval based on names and meeting slots');
+  
+  try {
+    const { sheet, namesTab, meetingSlotsTab, propertiesTab } = getOrCreateStateSheet();
+    
+    // Count total names (excluding header row)
+    const namesData = namesTab.getDataRange().getValues();
+    const totalNames = Math.max(0, namesData.length - 1); // Subtract 1 for header row
+    
+    // Count total meeting slots (excluding header row)
+    const slotsData = meetingSlotsTab.getDataRange().getValues();
+    const totalSlots = Math.max(0, slotsData.length - 1); // Subtract 1 for header row
+    
+    Logger.log(`Found ${totalNames} total names and ${totalSlots} total meeting slots`);
+    
+    // Calculate the optimal interval
+    let calculatedValue;
+    
+    if (totalSlots === 0) {
+      // If no meeting slots, default to 8 weeks
+      calculatedValue = 8;
+      Logger.log('No meeting slots found, defaulting to 8 weeks');
+    } else {
+      // Calculate: total names / total slots, rounded up
+      calculatedValue = Math.ceil(totalNames / totalSlots);
+      
+      // Ensure the value is within the valid range (1-26)
+      calculatedValue = Math.max(1, Math.min(26, calculatedValue));
+      
+      Logger.log(`Calculated value: Math.ceil(${totalNames} / ${totalSlots}) = ${calculatedValue}`);
+    }
+    
+    return {
+      success: true,
+      calculatedValue: calculatedValue,
+      totalNames: totalNames,
+      totalSlots: totalSlots,
+      formula: `Math.ceil(${totalNames} / ${totalSlots}) = ${calculatedValue}`,
+      message: `Auto-calculated recurring interval: ${calculatedValue} weeks (${totalNames} names ÷ ${totalSlots} slots, rounded up)`
+    };
+    
+  } catch (error) {
+    Logger.log('Error in calculateOptimalRecurringInterval: ' + error.toString());
+    throw new Error('Failed to calculate optimal recurring interval: ' + error.message);
+  }
+}
+
+function removeRecurringMeetingOnly(nameToRemove) {
+  Logger.log('Removing recurring meeting only for: ' + nameToRemove);
+  
+  try {
+    if (!nameToRemove || typeof nameToRemove !== 'string') {
+      throw new Error('Name must be provided as a string');
+    }
+    
+    const trimmedName = nameToRemove.trim();
+    if (trimmedName.length === 0) {
+      throw new Error('Name cannot be empty');
+    }
+    
+    // Get the default calendar
+    const calendar = CalendarApp.getDefaultCalendar();
+    
+    // Use 1 year range to find all recurring events
+    const today = new Date();
+    const oneYearAhead = new Date();
+    oneYearAhead.setFullYear(today.getFullYear() + 1);
+    
+    // Get all events in the date range
+    const allEvents = calendar.getEvents(today, oneYearAhead);
+    Logger.log('Total events found for deletion search: ' + allEvents.length);
+    
+    // Find all Skip Level events for this specific name
+    const skipLevelEvents = allEvents.filter(event => {
+      const title = event.getTitle();
+      return title && title.includes('Skip Level:') && title.includes(trimmedName);
+    });
+    Logger.log('Events with "Skip Level:" and name "' + trimmedName + '": ' + skipLevelEvents.length);
+    
+    let deletedSeries = 0;
+    let deletedSingleEvents = 0;
+    const eventSeriesMap = new Map(); // seriesId -> series object
+    
+    skipLevelEvents.forEach(event => {
+      const title = event.getTitle();
+      Logger.log('Processing event: "' + title + '"');
+      
+      try {
+        const eventSeries = event.getEventSeries();
+        if (eventSeries) {
+          // This is a recurring event
+          const seriesId = eventSeries.getId();
+          if (!eventSeriesMap.has(seriesId)) {
+            eventSeriesMap.set(seriesId, eventSeries);
+          }
+        } else {
+          // This is a single event
+          Logger.log('Deleting single event: ' + title);
+          event.deleteEvent();
+          deletedSingleEvents++;
+        }
+      } catch (error) {
+        Logger.log('Error processing event "' + title + '": ' + error.toString());
+      }
+    });
+    
+    // Delete recurring event series
+    eventSeriesMap.forEach((series, seriesId) => {
+      try {
+        Logger.log('Deleting recurring event series: ' + series.getTitle());
+        series.deleteEventSeries();
+        deletedSeries++;
+      } catch (error) {
+        Logger.log('Error deleting event series: ' + error.toString());
+      }
+    });
+    
+    Logger.log('Calendar deletion complete. Series deleted: ' + deletedSeries + ', Single events deleted: ' + deletedSingleEvents);
+    
+    // Now update the Google Sheet to clear calendar attributes for this name
+    const { sheet, namesTab, meetingSlotsTab, propertiesTab } = getOrCreateStateSheet();
+    
+    // Find the row with this name and clear calendar attributes
+    const lastRow = namesTab.getLastRow();
+    if (lastRow > 1) {
+      const nameRange = namesTab.getRange(2, 1, lastRow - 1, 7); // Get all data starting from row 2
+      const allData = nameRange.getValues();
+      
+      // Find the row index for this name
+      let targetRowIndex = -1;
+      for (let i = 0; i < allData.length; i++) {
+        if (allData[i][0] && String(allData[i][0]).trim().toLowerCase() === trimmedName.toLowerCase()) {
+          targetRowIndex = i + 2; // +2 because we started from row 2 and need 1-based index
+          break;
+        }
+      }
+      
+      if (targetRowIndex > 0) {
+        Logger.log('Found name "' + trimmedName + '" at row ' + targetRowIndex + ', clearing calendar attributes');
+        
+        // Clear the calendar-related columns but keep the name
+        namesTab.getRange(targetRowIndex, 3).setValue(''); // Status
+        namesTab.getRange(targetRowIndex, 4).setValue(''); // Calendar Event ID
+        namesTab.getRange(targetRowIndex, 5).setValue(''); // Event Title
+        namesTab.getRange(targetRowIndex, 6).setValue(''); // Calendar Link
+        namesTab.getRange(targetRowIndex, 7).setValue(''); // Next Occurrence
+        
+        Logger.log('Cleared calendar attributes for "' + trimmedName + '" in Google Sheet Names tab');
+      } else {
+        Logger.log('Warning: Could not find name "' + trimmedName + '" in Names tab to clear calendar attributes');
+      }
+    }
+    
+    return {
+      success: true,
+      nameKept: true,
+      meetingsDeleted: deletedSeries + deletedSingleEvents,
+      recurringSeriesDeleted: deletedSeries,
+      singleEventsDeleted: deletedSingleEvents,
+      message: `Calendar meetings for "${trimmedName}" have been removed. The name remains in the list.`
+    };
+    
+  } catch (error) {
+    Logger.log('Error in removeRecurringMeetingOnly: ' + error.toString());
+    throw new Error('Failed to remove recurring meeting: ' + error.message);
   }
 }

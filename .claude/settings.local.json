@@ -5,7 +5,8 @@
       "Bash(del eslint.config.js)",
       "Bash(rm:*)",
       "Bash(start index.html)",
-      "Bash(explorer:*)"
+      "Bash(explorer:*)",
+      "Bash(grep:*)"
     ],
     "deny": []
   }

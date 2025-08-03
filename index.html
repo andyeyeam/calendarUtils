@@ -518,6 +518,164 @@
             font-size: 0.875rem;
             margin: var(--space-sm) 0 var(--space-lg) 0;
         }
+        
+        /* Custom Tooltip Styles */
+        .tooltip {
+            position: relative;
+            display: inline-block;
+        }
+        
+        .tooltip .tooltiptext {
+            visibility: hidden;
+            width: 280px;
+            background-color: var(--gray-900);
+            color: var(--bg-primary);
+            text-align: center;
+            border-radius: var(--radius-md);
+            padding: var(--space-md);
+            position: absolute;
+            z-index: 1001;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -140px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            font-size: 0.75rem;
+            line-height: 1.4;
+            box-shadow: var(--shadow-lg);
+            border: 1px solid var(--gray-700);
+        }
+        
+        .tooltip .tooltiptext::after {
+            content: "";
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            margin-left: -5px;
+            border-width: 5px;
+            border-style: solid;
+            border-color: var(--gray-900) transparent transparent transparent;
+        }
+        
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
+        }
+        
+        /* Enhanced Actions Button and Dropdown Styles */
+        .actions-dropdown {
+            position: relative;
+            display: inline-block;
+            z-index: 1000;
+        }
+        
+        .actions-btn {
+            background: linear-gradient(135deg, var(--secondary-500) 0%, var(--secondary-600) 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 16px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            min-width: 80px;
+            justify-content: center;
+        }
+        
+        .actions-btn:hover {
+            background: linear-gradient(135deg, var(--secondary-600) 0%, var(--secondary-700) 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            background-color: white;
+            min-width: 180px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+            border-radius: 8px;
+            z-index: 9999;
+            right: 0;
+            top: calc(100% + 4px);
+            border: 1px solid var(--gray-200);
+            overflow: hidden;
+        }
+        
+        .dropdown-content.show {
+            display: block !important;
+            animation: dropdownFadeIn 0.2s ease;
+            opacity: 1 !important;
+            visibility: visible !important;
+        }
+        
+        @keyframes dropdownFadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .dropdown-item {
+            padding: 12px 16px;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            border-bottom: 1px solid var(--gray-100);
+        }
+        
+        .dropdown-item:last-child {
+            border-bottom: none;
+        }
+        
+        .dropdown-item:hover {
+            background-color: var(--gray-50);
+        }
+        
+        .dropdown-item.add {
+            color: var(--success-600);
+        }
+        
+        .dropdown-item.add:hover {
+            background-color: rgba(16, 185, 129, 0.1);
+        }
+        
+        .dropdown-item.remove {
+            color: var(--danger-500);
+        }
+        
+        .dropdown-item.remove:hover {
+            background-color: rgba(239, 68, 68, 0.1);
+        }
+        
+        .dropdown-item.remove-meeting {
+            color: var(--warning-600);
+        }
+        
+        .dropdown-item.remove-meeting:hover {
+            background-color: rgba(245, 158, 11, 0.1);
+        }
+        
+        /* Enhanced People List Row Hover Effect */
+        .people-list-row:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.12) !important;
+        }
+        
+        /* Ensure parent containers don't clip dropdowns */
+        .tab-content, .form-section {
+            overflow: visible !important;
+        }
+        
+        /* Specific override for People list container */
+        #currentNamesContent {
+            overflow: visible !important;
+        }
     </style>
 </head>
 <body>
@@ -546,6 +704,37 @@
             div.textContent = text;
             return div.innerHTML;
         }
+        
+        function formatTimeHHMM(timeString) {
+            if (!timeString) return '';
+            
+            try {
+                // Handle different time formats
+                if (timeString.includes(':')) {
+                    // If it's already in HH:MM format or HH:MM:SS format
+                    const timeParts = timeString.split(':');
+                    if (timeParts.length >= 2) {
+                        const hours = timeParts[0].padStart(2, '0');
+                        const minutes = timeParts[1].padStart(2, '0');
+                        return `${hours}:${minutes}`;
+                    }
+                }
+                
+                // Try to parse as Date if it's a full datetime string
+                const date = new Date(timeString);
+                if (!isNaN(date.getTime())) {
+                    const hours = date.getHours().toString().padStart(2, '0');
+                    const minutes = date.getMinutes().toString().padStart(2, '0');
+                    return `${hours}:${minutes}`;
+                }
+                
+                // If all else fails, return the original string
+                return escapeHtml(timeString);
+            } catch (error) {
+                console.warn('Error formatting time:', timeString, error);
+                return escapeHtml(timeString);
+            }
+        }
 
         // Enhanced cache for Skip Levels list with timestamp
         let cachedNamesWithEvents = null;
@@ -572,7 +761,7 @@
             container.style.maxWidth = '800px';
             container.innerHTML = `
                 <div class="card-header">
-                    <h1>Manage Skip Level Names</h1>
+                    <h1>Skip Levels</h1>
                     <button class="button secondary" onclick="goBackToMenu()">
                         Back to Menu
                     </button>
@@ -580,7 +769,7 @@
                 
                 <!-- Tab Navigation -->
                 <div class="tab-container">
-                    <button class="tab active" onclick="showTab('currentNames')">Current Names</button>
+                    <button class="tab active" onclick="showTab('currentNames')">People</button>
                     <button class="tab" onclick="showTab('uploadFile')">Upload Names from File</button>
                     <button class="tab" onclick="showTab('meetingSlots')">Meeting Slots</button>
                     <button class="tab" onclick="showTab('properties')">Properties</button>
@@ -590,10 +779,10 @@
                 <div id="currentNamesTab" class="tab-content active">
                     <div class="card">
                         <div class="card-header">
-                            <h2 class="section-title">Current Names</h2>
+                            <h2 class="section-title">People</h2>
                             <div class="actions-dropdown">
                                 <button class="actions-btn" onclick="toggleActionsDropdown()">
-                                    Actions
+                                    Mass Actions
                                     <span style="font-size: 0.625rem;">▼</span>
                                 </button>
                                 <div id="actionsDropdown" class="dropdown-content">
@@ -722,21 +911,25 @@
                         </p>
                         
                         <div class="form-section">
-                            <div class="form-grid cols-2">
-                                <div class="form-group">
-                                    <label class="form-label" style="font-size: 1rem;">Recurring Interval (weeks):</label>
-                                    <p class="section-description" style="margin-bottom: var(--space-md);">
-                                        Number of weeks between recurring skip level meetings (1-26)
-                                    </p>
-                                    <div style="display: flex; align-items: center; gap: var(--space-md);">
-                                        <input type="number" id="recurringIntervalInput" min="1" max="26" value="8" 
-                                               class="form-input" style="width: 5rem; text-align: center;"
-                                               onchange="validateRecurringInterval()">
-                                        <span style="color: var(--gray-600); font-size: 0.875rem;">weeks</span>
-                                        <div id="recurringIntervalStatus"></div>
-                                    </div>
+                            <div class="form-group">
+                                <label class="form-label" style="font-size: 1rem;">Recurring Interval (weeks):</label>
+                                <p class="section-description" style="margin-bottom: var(--space-md);">
+                                    Number of weeks between recurring skip level meetings (1-26)
+                                </p>
+                                <div style="display: flex; align-items: center; gap: var(--space-md); margin-bottom: var(--space-lg);">
+                                    <input type="number" id="recurringIntervalInput" min="1" max="26" placeholder="Loading..." 
+                                           class="form-input" style="width: 5rem; text-align: center;"
+                                           onchange="validateRecurringInterval()">
+                                    <span style="color: var(--gray-600); font-size: 0.875rem;">weeks</span>
+                                    <div id="recurringIntervalStatus"></div>
                                 </div>
-                                <div style="display: flex; align-items: end;">
+                                <div style="display: flex; gap: var(--space-md); flex-wrap: wrap;">
+                                    <div class="tooltip">
+                                        <button id="autoCalculateBtn" class="button secondary" onclick="autoCalculateRecurringInterval()">
+                                            🧮 Auto Calculate
+                                        </button>
+                                        <span class="tooltiptext">The number of names divided by the number of meeting slots rounded to the nearest whole integer</span>
+                                    </div>
                                     <button id="savePropertiesBtn" class="button success" onclick="saveRecurringInterval()">
                                         Save Changes
                                     </button>
@@ -761,9 +954,6 @@
             
             // Load meeting slots data for the Meeting Slots tab
             loadMeetingSlots();
-            
-            // Load properties data for the Properties tab
-            loadCurrentProperties();
         }
         
         
@@ -1217,35 +1407,39 @@
                         statusIcon = '<span style="color: #28a745; font-size: 14px; margin-right: 8px;">✓</span>';
                         // Remove any bracketed timezone information from display
                         const cleanNextOccurrence = nameData.nextOccurrence.replace(/\s*\([^)]*\)/g, '');
-                        calendarStatus = `<span style="color: #6c757d; margin-right: 6px;">Next occurrence:</span><a href="${nameData.calendarLink}" target="_blank" style="color: #0066cc; text-decoration: none; font-weight: 500;">📅 ${cleanNextOccurrence}</a>`;
+                        calendarStatus = `<a href="${nameData.calendarLink}" target="_blank" style="color: #0066cc; text-decoration: none; font-weight: 500;">📅 ${cleanNextOccurrence}</a>`;
                     } else {
                         statusIcon = '<span style="color: #dc3545; font-size: 14px; margin-right: 8px;">✗</span>';
                         calendarStatus = '<span style="color: #6c757d; font-style: italic;">No meeting scheduled</span>';
                     }
                     
                     html += `
-                        <div style="border: 1px solid ${borderColor}; border-left: 4px solid ${leftBorderColor}; border-radius: 6px; padding: 12px 16px; margin-bottom: 8px; background-color: ${backgroundColor}; transition: all 0.2s ease; box-shadow: 0 1px 3px rgba(0,0,0,0.06);">
-                            <div style="display: flex; align-items: center; justify-content: space-between;">
-                                <div style="display: flex; align-items: center; flex: 1;">
-                                    <div style="display: flex; align-items: center; min-width: 180px;">
-                                        <span style="font-weight: 600; color: #2c3e50; font-size: 15px;">${escapeHtml(nameData.name)}</span>
-                                    </div>
-                                    <div style="display: flex; align-items: center; flex: 1; justify-content: flex-end; margin-right: 20px;">
-                                        ${statusIcon}
-                                        <span style="font-size: 14px;">${calendarStatus}</span>
-                                    </div>
+                        <div class="people-list-row" style="border: 1px solid ${borderColor}; border-left: 4px solid ${leftBorderColor}; border-radius: 8px; padding: 16px 20px; margin-bottom: 10px; background-color: ${backgroundColor}; transition: all 0.3s ease; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+                            <div style="display: grid; grid-template-columns: 1fr auto auto; gap: 20px; align-items: center; min-height: 24px;">
+                                <!-- Name on the left -->
+                                <div style="display: flex; align-items: center;">
+                                    <span style="font-weight: 600; color: #2c3e50; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(nameData.name)}</span>
                                 </div>
+                                <!-- Status right-justified in middle -->
+                                <div style="display: flex; align-items: center; justify-content: flex-end; white-space: nowrap; min-width: 200px;">
+                                    ${statusIcon}
+                                    <span style="font-size: 14px; white-space: nowrap; color: ${nameData.found ? '#28a745' : '#6c757d'};">${calendarStatus}</span>
+                                </div>
+                                <!-- Actions button on the right -->
                                 <div style="flex-shrink: 0;">
                                     <div class="actions-dropdown">
                                         <button class="actions-btn" onclick="toggleDropdown('${escapeHtml(nameData.name).replace(/'/g, "\\'")}')">
                                             Actions
-                                            <span style="font-size: 10px;">▼</span>
+                                            <span style="font-size: 10px; margin-left: 4px;">▼</span>
                                         </button>
                                         <div id="dropdown-${escapeHtml(nameData.name).replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '')}" class="dropdown-content">
                                             ${!nameData.found ? 
                                                 `<div class="dropdown-item add" onclick="addRecurringMeeting('${escapeHtml(nameData.name).replace(/'/g, "\\'")}')">
                                                     <span>➕</span> Add Recurring Meeting
-                                                </div>` : ''
+                                                </div>` : 
+                                                `<div class="dropdown-item remove-meeting" onclick="removeRecurringMeeting('${escapeHtml(nameData.name).replace(/'/g, "\\'")}')">
+                                                    <span>📅❌</span> Remove Recurring Meeting
+                                                </div>`
                                             }
                                             <div class="dropdown-item remove" onclick="removeIndividualName('${escapeHtml(nameData.name).replace(/'/g, "\\'")}')">
                                                 <span>🗑️</span> Remove
@@ -1276,18 +1470,40 @@
         }
         
         function toggleDropdown(name) {
+            console.log('toggleDropdown called for name:', name);
+            
             // Close all other dropdowns first
             const allDropdowns = document.querySelectorAll('.dropdown-content');
+            console.log('Found', allDropdowns.length, 'dropdowns total');
             allDropdowns.forEach(dropdown => {
                 dropdown.classList.remove('show');
             });
             
             // Generate the same ID as used in the HTML
             const dropdownId = 'dropdown-' + name.replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '');
+            console.log('Looking for dropdown with ID:', dropdownId);
             const dropdown = document.getElementById(dropdownId);
             
             if (dropdown) {
+                console.log('Dropdown found, toggling show class');
                 dropdown.classList.toggle('show');
+                console.log('Dropdown now has classes:', dropdown.className);
+                
+                // Add click outside to close functionality
+                if (dropdown.classList.contains('show')) {
+                    console.log('Dropdown is now showing, adding click outside handler');
+                    setTimeout(() => {
+                        document.addEventListener('click', function closeOnClickOutside(event) {
+                            if (!dropdown.contains(event.target) && !event.target.closest('.actions-btn')) {
+                                dropdown.classList.remove('show');
+                                document.removeEventListener('click', closeOnClickOutside);
+                            }
+                        });
+                    }, 10);
+                }
+            } else {
+                console.error('Dropdown not found with ID:', dropdownId);
+                console.log('Available dropdown IDs:', Array.from(document.querySelectorAll('.dropdown-content')).map(d => d.id));
             }
         }
         
@@ -1493,7 +1709,7 @@
                     })
                     .removeSkipLevel(nameToRemove);
             } else {
-                // Name has no calendar events - optimize for local removal
+                // Name has no calendar events - remove from list and refresh data
                 document.getElementById('namesList').innerHTML = `
                     <div class="loading-container">
                         <div class="spinner"></div>
@@ -1509,18 +1725,35 @@
                 
                 google.script.run
                     .withSuccessHandler(function(result) {
-                        console.log('Name removed successfully');
+                        console.log('Name removed successfully, refreshing calendar data for remaining names');
                         
-                        // Update cache with the updated data
-                        cachedNamesWithEvents = updatedNamesWithEvents;
-                        
-                        // Display the updated list locally (this will sort alphabetically)
-                        displayCurrentNames(updatedNamesWithEvents);
-                        
-                        // Show success message
-                        setTimeout(() => {
-                            alert(`✓ "${nameToRemove}" has been successfully removed from the list.`);
-                        }, 100);
+                        // Instead of using cached data, refresh from Google Sheet to ensure accuracy
+                        google.script.run
+                            .withSuccessHandler(function(refreshedNamesWithEvents) {
+                                console.log('Names list refreshed after removal with updated calendar data');
+                                
+                                // Update cache with fresh data
+                                cachedNamesWithEvents = refreshedNamesWithEvents;
+                                cacheTimestamp = Date.now();
+                                
+                                // Display the refreshed list
+                                displayCurrentNames(refreshedNamesWithEvents);
+                                
+                                // Show success message
+                                setTimeout(() => {
+                                    alert(`✓ "${nameToRemove}" has been successfully removed from the list.`);
+                                }, 100);
+                            })
+                            .withFailureHandler(function(error) {
+                                console.error('Error refreshing names list after removal:', error);
+                                
+                                // Fallback to filtered cached data if refresh fails
+                                cachedNamesWithEvents = updatedNamesWithEvents;
+                                displayCurrentNames(updatedNamesWithEvents);
+                                
+                                alert(`"${nameToRemove}" was removed, but there was an error refreshing calendar data: ` + (error.message || error.toString()));
+                            })
+                            .getNamesWithCalendarEvents();
                     })
                     .withFailureHandler(function(error) {
                         console.error('Error saving updated names:', error);
@@ -1530,6 +1763,75 @@
                     })
                     .saveSkipLevelNames(updatedNames);
             }
+        }
+        
+        function removeRecurringMeeting(nameToRemove) {
+            console.log('Removing recurring meeting for:', nameToRemove);
+            
+            // Show confirmation dialog
+            const confirmMessage = `⚠️ REMOVE RECURRING MEETING ⚠️\n\n` +
+                                 `This action will:\n` +
+                                 `• DELETE all Skip Level calendar events for "${nameToRemove}"\n` +
+                                 `• DELETE all future occurrences of these meetings\n` +
+                                 `• KEEP "${nameToRemove}" in the names list\n\n` +
+                                 `The name will remain but without any scheduled meetings.\n\n` +
+                                 `This action CANNOT be undone!\n\n` +
+                                 `Are you absolutely sure you want to proceed?`;
+            
+            if (!confirm(confirmMessage)) {
+                return;
+            }
+            
+            // Close the dropdown
+            const dropdownId = 'dropdown-' + nameToRemove.replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '');
+            const dropdown = document.getElementById(dropdownId);
+            if (dropdown) {
+                dropdown.classList.remove('show');
+            }
+            
+            // Show loading state
+            document.getElementById('namesList').innerHTML = `
+                <div class="loading-container">
+                    <div class="spinner"></div>
+                    <p>Removing calendar meetings for "${nameToRemove}"...</p>
+                </div>
+            `;
+            
+            // Call backend function to remove just the calendar events
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    console.log('Calendar meetings removed successfully, refreshing list');
+                    
+                    // Refresh the names list to show updated calendar status
+                    google.script.run
+                        .withSuccessHandler(function(refreshedNamesWithEvents) {
+                            console.log('Names list refreshed after calendar removal');
+                            
+                            // Update cache with fresh data
+                            cachedNamesWithEvents = refreshedNamesWithEvents;
+                            cacheTimestamp = Date.now();
+                            
+                            // Display the refreshed list
+                            displayCurrentNames(refreshedNamesWithEvents);
+                            
+                            // Show success message
+                            setTimeout(() => {
+                                alert(`✓ Calendar meetings for "${nameToRemove}" have been successfully removed.\nThe name remains in the list.`);
+                            }, 100);
+                        })
+                        .withFailureHandler(function(error) {
+                            console.error('Error refreshing names list after calendar removal:', error);
+                            alert('Calendar meetings were removed, but there was an error refreshing the list. Please refresh the page.');
+                            loadCurrentNames();
+                        })
+                        .getNamesWithCalendarEvents();
+                })
+                .withFailureHandler(function(error) {
+                    console.error('Error removing calendar meetings:', error);
+                    alert('Error removing calendar meetings: ' + error.message);
+                    loadCurrentNames(); // Reload the original state
+                })
+                .removeRecurringMeetingOnly(nameToRemove);
         }
         
         function addIndividualName() {
@@ -1687,7 +1989,7 @@
                                 <strong>Day:</strong> ${escapeHtml(slot.dayOfWeek)}
                             </div>
                             <div>
-                                <strong>Time:</strong> ${escapeHtml(slot.time)}
+                                <strong>Time:</strong> ${formatTimeHHMM(slot.time)}
                             </div>
                             <div>
                                 <strong>Duration:</strong> ${escapeHtml(slot.duration)} mins
@@ -1845,22 +2147,60 @@
         }
         
         function loadCurrentProperties() {
-            console.log('Loading current properties');
+            console.log('Properties tab accessed - Loading Recurring Interval from CalendarUtilities Google Sheet...');
             
             const recurringIntervalInput = document.getElementById('recurringIntervalInput');
             
-            // Load the recurring interval property
+            if (!recurringIntervalInput) {
+                console.error('Recurring interval input field not found');
+                return;
+            }
+            
+            // Set loading state
+            recurringIntervalInput.value = '';
+            recurringIntervalInput.placeholder = 'Loading...';
+            recurringIntervalInput.disabled = true;
+            
+            // Read the Recurring Interval property from Google Sheet Properties tab
             google.script.run
-                .withSuccessHandler(function(result) {
-                    console.log('Properties loaded:', result);
+                .withSuccessHandler(function(propertyResult) {
+                    console.log('Google Sheet Properties tab accessed. Result:', propertyResult);
                     
-                    // Update the input field with current value
-                    recurringIntervalInput.value = result.value || 8;
+                    let finalValue = 8; // Default fallback
+                    
+                    if (propertyResult && propertyResult.found && propertyResult.value !== null && propertyResult.value !== undefined) {
+                        const sheetValue = parseInt(propertyResult.value);
+                        if (!isNaN(sheetValue) && sheetValue >= 1 && sheetValue <= 26) {
+                            finalValue = sheetValue;
+                            console.log(`SUCCESS: Read Recurring Interval from Google Sheet Properties tab: ${finalValue}`);
+                        } else {
+                            console.log(`Invalid value in Google Sheet (${propertyResult.value}), using default: 8`);
+                        }
+                    } else {
+                        console.log('Recurring Interval property not found in Google Sheet Properties tab, using default: 8');
+                    }
+                    
+                    // Update the input field with the value from Google Sheet
+                    recurringIntervalInput.value = finalValue;
+                    recurringIntervalInput.placeholder = '';
+                    recurringIntervalInput.disabled = false;
+                    
+                    // Validate the value
+                    validateRecurringInterval();
+                    
+                    console.log(`Recurring Interval input field populated with value: ${finalValue}`);
                 })
                 .withFailureHandler(function(error) {
-                    console.error('Error loading properties:', error);
-                    // Set default value in input on error
+                    console.error('FAILED to read from Google Sheet Properties tab:', error);
+                    
+                    // Use default value on failure
                     recurringIntervalInput.value = 8;
+                    recurringIntervalInput.placeholder = '';
+                    recurringIntervalInput.disabled = false;
+                    
+                    validateRecurringInterval();
+                    
+                    console.log('Using default Recurring Interval value: 8');
                 })
                 .getProperty('Recurring Interval');
         }
@@ -1881,6 +2221,66 @@
             }
         }
         
+        function autoCalculateRecurringInterval() {
+            console.log('Auto-calculating optimal recurring interval');
+            
+            const input = document.getElementById('recurringIntervalInput');
+            const autoCalcButton = document.getElementById('autoCalculateBtn');
+            const statusElement = document.getElementById('propertiesStatus');
+            
+            // Show loading state on button
+            const originalButtonText = autoCalcButton.innerHTML;
+            autoCalcButton.innerHTML = `
+                <div style="display: inline-flex; align-items: center; gap: 8px;">
+                    <div style="border: 2px solid #f3f3f3; border-top: 2px solid var(--secondary-600); border-radius: 50%; width: 16px; height: 16px; animation: spin 1s linear infinite;"></div>
+                    Calculating...
+                </div>
+            `;
+            autoCalcButton.disabled = true;
+            
+            statusElement.innerHTML = `
+                <div style="background-color: var(--bg-secondary); color: var(--gray-700); border: 1px solid var(--gray-300); padding: var(--space-md); border-radius: var(--radius-md);">
+                    Calculating optimal recurring interval based on current data...
+                </div>
+            `;
+            statusElement.style.display = 'block';
+            
+            // Call the backend function
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    console.log('Auto-calculation result:', result);
+                    
+                    // Restore button
+                    autoCalcButton.innerHTML = originalButtonText;
+                    autoCalcButton.disabled = false;
+                    
+                    // Update the input field with calculated value
+                    input.value = result.calculatedValue;
+                    
+                    // Validate the new value
+                    validateRecurringInterval();
+                    
+                    // Hide status element
+                    statusElement.style.display = 'none';
+                })
+                .withFailureHandler(function(error) {
+                    console.error('Error in auto-calculation:', error);
+                    
+                    // Restore button
+                    autoCalcButton.innerHTML = originalButtonText;
+                    autoCalcButton.disabled = false;
+                    
+                    // Show error message
+                    statusElement.innerHTML = `
+                        <div style="background-color: #fef2f2; color: #dc2626; border: 1px solid #fecaca; padding: var(--space-md); border-radius: var(--radius-md);">
+                            <strong>Auto-Calculation Error:</strong><br>
+                            ${error.message || error.toString()}
+                        </div>
+                    `;
+                })
+                .calculateOptimalRecurringInterval();
+        }
+        
         function saveRecurringInterval() {
             console.log('Saving recurring interval');
             
@@ -1898,7 +2298,7 @@
             // Validate input
             if (!validateRecurringInterval()) {
                 statusElement.innerHTML = `
-                    <div style="background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;">
+                    <div style="background-color: #fef2f2; color: #dc2626; border: 1px solid #fecaca; padding: var(--space-md); border-radius: var(--radius-md);">
                         <strong>Validation Error:</strong> Recurring interval must be between 1 and 26 weeks.
                     </div>
                 `;
@@ -1910,14 +2310,14 @@
             const originalButtonText = saveButton.innerHTML;
             saveButton.innerHTML = `
                 <div style="display: inline-flex; align-items: center; gap: 8px;">
-                    <div style="border: 2px solid #f3f3f3; border-top: 2px solid #28a745; border-radius: 50%; width: 16px; height: 16px; animation: spin 1s linear infinite;"></div>
+                    <div style="border: 2px solid #f3f3f3; border-top: 2px solid var(--success-600); border-radius: 50%; width: 16px; height: 16px; animation: spin 1s linear infinite;"></div>
                     Saving...
                 </div>
             `;
             saveButton.disabled = true;
             
             statusElement.innerHTML = `
-                <div style="background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb;">
+                <div style="background-color: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; padding: var(--space-md); border-radius: var(--radius-md);">
                     Saving recurring interval...
                 </div>
             `;
@@ -1934,7 +2334,7 @@
                     
                     // Show success message
                     statusElement.innerHTML = `
-                        <div style="background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb;">
+                        <div style="background-color: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; padding: var(--space-md); border-radius: var(--radius-md);">
                             <strong>Success!</strong> ${result.message}
                         </div>
                     `;
@@ -1953,13 +2353,14 @@
                     
                     // Show error message
                     statusElement.innerHTML = `
-                        <div style="background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;">
+                        <div style="background-color: #fef2f2; color: #dc2626; border: 1px solid #fecaca; padding: var(--space-md); border-radius: var(--radius-md);">
                             <strong>Error:</strong> ${error.message || error.toString()}
                         </div>
                     `;
                 })
                 .setRecurringInterval(value);
         }
+        
         
         function goBackToMenu() {
             console.log('Going back to main menu');
