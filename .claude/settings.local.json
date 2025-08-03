@@ -9,7 +9,9 @@
       "Bash(grep:*)",
       "Bash(start \"C:\\Users\\andre\\Repos\\calendarUtilities\\index.html\")",
       "Bash(node:*)",
-      "Bash(del \"C:\\Users\\andre\\Repos\\calendarUtilities\\TimeParsingTest.js\")"
+      "Bash(del \"C:\\Users\\andre\\Repos\\calendarUtilities\\TimeParsingTest.js\")",
+      "Bash(start \"C:\\Users\\andre\\Repos\\calendarUtilities\\ModalTest.html\")",
+      "Bash(start \"\" \"C:\\Users\\andre\\Repos\\calendarUtilities\\ModalTest.html\")"
     ],
     "deny": []
   }
