@@ -1990,7 +1990,7 @@
         }
         
         function clearAllNames() {
-            if (!confirm('Are you sure you want to clear all loaded names? This action cannot be undone.')) {
+            if (!confirm('Are you sure you want to clear all loaded names and delete their calendar meetings?\n\nThis will:\n• Remove all names from the list\n• Delete all associated recurring calendar meetings\n\nThis action cannot be undone.')) {
                 return;
             }
             
@@ -2018,25 +2018,37 @@
             document.getElementById('namesList').innerHTML = `
                 <div class="loading-container">
                     <div class="spinner"></div>
-                    <p>Clearing all names...</p>
+                    <p>Clearing all names and deleting calendar meetings...</p>
+                    <div style="color: #6c757d; font-size: 12px; margin-top: 10px;">
+                        This may take a moment as we delete calendar events...
+                    </div>
                 </div>
             `;
             
             google.script.run
                 .withSuccessHandler(function(result) {
-                    console.log('Names cleared successfully');
+                    console.log('Names and meetings cleared successfully:', result);
                     restoreButtonState();
                     cachedNamesWithEvents = null; // Clear cache
                     loadCurrentNames();
-                    alert('All names have been cleared.');
+                    
+                    let message = 'All names have been cleared from the list.';
+                    if (result.meetingsDeleted > 0) {
+                        message += '\n' + result.meetingsDeleted + ' calendar meeting(s) were deleted.';
+                    }
+                    if (result.errors && result.errors.length > 0) {
+                        message += '\n\nWarning: Some calendar events could not be deleted:\n• ' + result.errors.join('\n• ');
+                    }
+                    
+                    alert(message);
                 })
                 .withFailureHandler(function(error) {
-                    console.error('Error clearing names:', error);
+                    console.error('Error clearing names and meetings:', error);
                     restoreButtonState();
-                    alert('Error clearing names: ' + (error.message || error.toString()));
+                    alert('Error clearing names and meetings: ' + (error.message || error.toString()));
                     loadCurrentNames();
                 })
-                .clearSkipLevelNames();
+                .clearAllNamesAndMeetings();
         }
         
         function removeIndividualName(nameToRemove) {

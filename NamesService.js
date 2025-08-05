@@ -137,6 +137,105 @@ function getSkipLevelNames() {
   }
 }
 
+function clearAllNamesAndMeetings() {
+  Logger.log('Clearing all names and their calendar meetings');
+  
+  try {
+    // Get all names with their calendar event data
+    const namesWithEvents = getNamesWithCalendarEvents();
+    Logger.log('Found ' + namesWithEvents.length + ' names to process');
+    
+    let meetingsDeleted = 0;
+    let errors = [];
+    const calendar = CalendarApp.getDefaultCalendar();
+    
+    // Delete calendar events for each name that has an event ID
+    for (const nameData of namesWithEvents) {
+      if (nameData.found && nameData.name) {
+        Logger.log('Processing deletion for: ' + nameData.name);
+        
+        try {
+          // Get the event ID from the Google Sheet data
+          const { sheet, namesTab, meetingSlotsTab, propertiesTab } = getOrCreateStateSheet();
+          const lastRow = namesTab.getLastRow();
+          
+          if (lastRow > 1) {
+            const dataRange = namesTab.getRange(2, 1, lastRow - 1, 7);
+            const allData = dataRange.getValues();
+            
+            // Find the row with this name and get the event ID
+            for (let i = 0; i < allData.length; i++) {
+              const rowName = allData[i][0] ? String(allData[i][0]).trim() : '';
+              if (rowName.toLowerCase() === nameData.name.toLowerCase()) {
+                const eventId = allData[i][3] ? String(allData[i][3]).trim() : '';
+                
+                if (eventId) {
+                  Logger.log('Found event ID for ' + nameData.name + ': ' + eventId);
+                  
+                  try {
+                    // Try to get the event by ID and delete it
+                    const event = calendar.getEventById(eventId);
+                    if (event) {
+                      // Check if it's a recurring event
+                      const eventSeries = event.getEventSeries();
+                      if (eventSeries) {
+                        Logger.log('Deleting recurring event series for: ' + nameData.name);
+                        eventSeries.deleteEventSeries();
+                      } else {
+                        Logger.log('Deleting single event for: ' + nameData.name);
+                        event.deleteEvent();
+                      }
+                      meetingsDeleted++;
+                      Logger.log('Successfully deleted calendar event for: ' + nameData.name);
+                    } else {
+                      Logger.log('Event not found by ID for ' + nameData.name + ', event may have been already deleted');
+                    }
+                  } catch (eventError) {
+                    const errorMsg = 'Failed to delete calendar event for "' + nameData.name + '": ' + eventError.message;
+                    Logger.log(errorMsg);
+                    errors.push(errorMsg);
+                  }
+                } else {
+                  Logger.log('No event ID found for: ' + nameData.name);
+                }
+                break;
+              }
+            }
+          }
+        } catch (deleteError) {
+          const errorMsg = 'Error processing deletion for "' + nameData.name + '": ' + deleteError.message;
+          Logger.log(errorMsg);
+          errors.push(errorMsg);
+        }
+      }
+    }
+    
+    // Now clear all data from the Google Sheet
+    const { sheet, namesTab, meetingSlotsTab, propertiesTab } = getOrCreateStateSheet();
+    const lastRow = namesTab.getLastRow();
+    if (lastRow > 1) {
+      namesTab.getRange(2, 1, lastRow - 1, 7).clearContent();
+      Logger.log('Cleared ' + (lastRow - 1) + ' rows of data from Google Sheet');
+    } else {
+      Logger.log('No data to clear from Google Sheet');
+    }
+    
+    Logger.log('Successfully cleared all names and meetings. Meetings deleted: ' + meetingsDeleted + ', Errors: ' + errors.length);
+    
+    return { 
+      success: true, 
+      count: 0,
+      names: [],
+      meetingsDeleted: meetingsDeleted,
+      errors: errors
+    };
+    
+  } catch (error) {
+    Logger.log('Error in clearAllNamesAndMeetings: ' + error.toString());
+    throw new Error('Failed to clear all names and meetings: ' + error.message);
+  }
+}
+
 function clearSkipLevelNames() {
   Logger.log('Clearing skip level names from Google Sheet');
   
