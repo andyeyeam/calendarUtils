@@ -704,6 +704,186 @@ function removeAllRecurringMeetingsOnly() {
   }
 }
 
+function updateRecurringIntervals() {
+  Logger.log('Updating recurring intervals for existing meetings');
+  
+  try {
+    // Get the current recurring interval from Properties tab
+    const recurringIntervalResult = getProperty('Recurring Interval');
+    if (!recurringIntervalResult.found) {
+      const errorMessage = 'Recurring interval has not been defined in the Properties tab of the CalendarUtilities State Sheet. Please set the "Recurring Interval" property first.';
+      Logger.log(errorMessage);
+      throw new Error(errorMessage);
+    }
+    
+    const newRecurringInterval = parseInt(recurringIntervalResult.value);
+    if (isNaN(newRecurringInterval) || newRecurringInterval < 1 || newRecurringInterval > 26) {
+      const errorMessage = 'Invalid recurring interval value: ' + recurringIntervalResult.value + '. Must be between 1 and 26 weeks.';
+      Logger.log(errorMessage);
+      throw new Error(errorMessage);
+    }
+    
+    Logger.log('Using new recurring interval from Properties tab: ' + newRecurringInterval + ' weeks');
+    
+    // Get all names with calendar events from the Google Sheet
+    const namesWithEvents = getNamesWithCalendarEvents();
+    const namesWithCalendarEvents = namesWithEvents.filter(nameData => nameData.found);
+    
+    if (namesWithCalendarEvents.length === 0) {
+      Logger.log('No names with calendar events found');
+      return {
+        success: true,
+        totalNames: 0,
+        meetingsUpdated: 0,
+        errors: []
+      };
+    }
+    
+    Logger.log('Processing ' + namesWithCalendarEvents.length + ' names with calendar events');
+    
+    // Get the default calendar
+    const calendar = CalendarApp.getDefaultCalendar();
+    
+    let meetingsUpdated = 0;
+    const errors = [];
+    const updatedMeetings = [];
+    
+    // Get the Google Sheet data to access event IDs
+    const { sheet, namesTab, meetingSlotsTab, propertiesTab } = getOrCreateStateSheet();
+    const lastRow = namesTab.getLastRow();
+    
+    if (lastRow <= 1) {
+      throw new Error('No data found in Names tab');
+    }
+    
+    const dataRange = namesTab.getRange(2, 1, lastRow - 1, 7);
+    const allData = dataRange.getValues();
+    
+    // Process each name with a calendar event
+    for (const nameData of namesWithCalendarEvents) {
+      Logger.log('=== Processing name: ' + nameData.name + ' ===');
+      
+      try {
+        // Find the row with this name and get the event ID
+        let eventId = null;
+        for (let i = 0; i < allData.length; i++) {
+          const rowName = allData[i][0] ? String(allData[i][0]).trim() : '';
+          if (rowName.toLowerCase() === nameData.name.toLowerCase()) {
+            eventId = allData[i][3] ? String(allData[i][3]).trim() : '';
+            break;
+          }
+        }
+        
+        if (!eventId) {
+          const errorMsg = 'No event ID found for "' + nameData.name + '" in Google Sheet';
+          Logger.log(errorMsg);
+          errors.push(errorMsg);
+          continue;
+        }
+        
+        Logger.log('Found event ID for ' + nameData.name + ': ' + eventId);
+        
+        // Get the event by ID
+        const event = calendar.getEventById(eventId);
+        if (!event) {
+          const errorMsg = 'Calendar event not found for "' + nameData.name + '" with ID: ' + eventId;
+          Logger.log(errorMsg);
+          errors.push(errorMsg);
+          continue;
+        }
+        
+        // Check if it's a recurring event
+        const eventSeries = event.getEventSeries();
+        if (!eventSeries) {
+          const errorMsg = 'Event for "' + nameData.name + '" is not a recurring event, skipping';
+          Logger.log(errorMsg);
+          errors.push(errorMsg);
+          continue;
+        }
+        
+        // Get current event details
+        const eventTitle = event.getTitle();
+        const eventStart = event.getStartTime();
+        const eventEnd = event.getEndTime();
+        
+        Logger.log('Updating recurring event for ' + nameData.name + ': ' + eventTitle);
+        Logger.log('Current start time: ' + eventStart.toString());
+        Logger.log('Current end time: ' + eventEnd.toString());
+        Logger.log('New recurrence: Every ' + newRecurringInterval + ' weeks');
+        
+        // Delete the old recurring series
+        eventSeries.deleteEventSeries();
+        Logger.log('Deleted old recurring series for: ' + nameData.name);
+        
+        // Create a new recurring event with the updated interval
+        const newRecurringEvent = calendar.createEventSeries(
+          eventTitle,
+          eventStart,
+          eventEnd,
+          CalendarApp.newRecurrence().addWeeklyRule().interval(newRecurringInterval)
+        );
+        
+        Logger.log('Created new recurring event for ' + nameData.name + ' with ID: ' + newRecurringEvent.getId());
+        
+        // Update the Google Sheet with the new event ID
+        const newEventId = newRecurringEvent.getId();
+        
+        // Format date for Google Calendar day view URL: YYYY/M/D
+        const year = eventStart.getFullYear();
+        const month = eventStart.getMonth() + 1; // JavaScript months are 0-based
+        const day = eventStart.getDate();
+        const calendarLink = `https://calendar.google.com/calendar/u/0/r/day/${year}/${month}/${day}`;
+        
+        // Format date/time for next occurrence
+        const dateStr = eventStart.toLocaleDateString();
+        const timeStr = eventStart.toLocaleTimeString().replace(/\s*\([^)]*\)/, '');
+        const nextOccurrence = dateStr + ' ' + timeStr;
+        
+        // Update the Google Sheet with new calendar event details
+        try {
+          updateNameWithCalendarDetails(nameData.name, newEventId, eventTitle, calendarLink, nextOccurrence);
+          Logger.log('Updated Google Sheet with new calendar details for ' + nameData.name);
+        } catch (updateError) {
+          Logger.log('Error updating Google Sheet for ' + nameData.name + ': ' + updateError.toString());
+          // Continue with processing even if sheet update fails
+        }
+        
+        meetingsUpdated++;
+        
+        updatedMeetings.push({
+          name: nameData.name,
+          oldEventId: eventId,
+          newEventId: newEventId,
+          eventTitle: eventTitle,
+          newRecurringInterval: newRecurringInterval,
+          calendarLink: calendarLink,
+          nextOccurrence: nextOccurrence
+        });
+        
+      } catch (error) {
+        const errorMsg = 'Failed to update recurring interval for "' + nameData.name + '": ' + error.message;
+        Logger.log(errorMsg);
+        errors.push(errorMsg);
+      }
+    }
+    
+    Logger.log('Recurring interval update completed. Updated: ' + meetingsUpdated + ', Errors: ' + errors.length);
+    
+    return {
+      success: true,
+      totalNames: namesWithCalendarEvents.length,
+      meetingsUpdated: meetingsUpdated,
+      newRecurringInterval: newRecurringInterval,
+      updatedMeetings: updatedMeetings,
+      errors: errors
+    };
+    
+  } catch (error) {
+    Logger.log('Error in updateRecurringIntervals: ' + error.toString());
+    throw new Error('Failed to update recurring intervals: ' + error.message);
+  }
+}
+
 function deleteAllRecurringMeetings() {
   Logger.log('Deleting all recurring meetings');
   

@@ -1181,6 +1181,11 @@
                                     <span class="tooltip">Add all missing recurring meetings</span>
                                 </button>
                                 
+                                <!-- Update Recurring Intervals Icon -->
+                                <button class="action-icon" style="background: linear-gradient(135deg, var(--warning-500) 0%, var(--warning-600) 100%); color: white;" onclick="updateAllRecurringIntervals();">
+                                    🔄⏰
+                                    <span class="tooltip">Update recurring intervals to match Properties setting</span>
+                                </button>
                                 
                                 <!-- Remove All People Icon -->
                                 <button class="action-icon remove-person" onclick="clearAllNames();">
@@ -1799,6 +1804,81 @@
                     loadCurrentNames();
                 })
                 .createMeetingsForSpecificNames(namesToProcess);
+        }
+        
+        function updateAllRecurringIntervals() {
+            console.log('Update all recurring intervals requested');
+            
+            if (!cachedNamesWithEvents || cachedNamesWithEvents.length === 0) {
+                alert('No names loaded. Please refresh the list first.');
+                return;
+            }
+            
+            // Only process names that have calendar meetings (found: true)
+            const namesWithMeetings = cachedNamesWithEvents.filter(nameData => nameData.found);
+            
+            if (namesWithMeetings.length === 0) {
+                alert('No names with existing calendar meetings found. Nothing to update.');
+                return;
+            }
+            
+            // Show detailed confirmation
+            const confirmMessage = `Update recurring intervals for existing calendar meetings?\n\n` +
+                                 `Names with meetings to update: ${namesWithMeetings.length}\n` +
+                                 `• ${namesWithMeetings.map(n => n.name).join('\\n• ')}\n\n` +
+                                 `This will:\n` +
+                                 `• Read the current Recurring Interval from Properties tab\n` +
+                                 `• Update each existing calendar meeting to use the new interval\n` +
+                                 `• Recreate recurring events with the updated schedule\n` +
+                                 `• Update Google Sheet with new event details\n\n` +
+                                 `Continue with recurring interval update?`;
+            
+            if (!confirm(confirmMessage)) {
+                return;
+            }
+            
+            // Show loading state
+            document.getElementById('namesList').innerHTML = `
+                <div class="loading-container">
+                    <div class="spinner"></div>
+                    <p>Updating recurring intervals for ${namesWithMeetings.length} meetings...</p>
+                    <div style="color: #6c757d; font-size: 12px; margin-top: 10px;">
+                        This may take a moment as we update calendar events...
+                    </div>
+                </div>
+            `;
+            
+            // Call backend to update recurring intervals
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    console.log('Recurring intervals updated successfully:', result);
+                    
+                    // Show success message
+                    let successMessage = `✓ Recurring interval update completed!\n\n`;
+                    successMessage += `Summary:\n`;
+                    successMessage += `• Names processed: ${result.totalNames}\n`;
+                    successMessage += `• Meetings updated: ${result.meetingsUpdated}\n`;
+                    successMessage += `• New recurring interval: ${result.newRecurringInterval} weeks`;
+                    
+                    if (result.errors && result.errors.length > 0) {
+                        successMessage += `\n\nWarnings:\n`;
+                        successMessage += `• ${result.errors.join('\\n• ')}`;
+                    }
+                    
+                    alert(successMessage);
+                    
+                    // Clear cache and refresh the names list to show updated details
+                    cachedNamesWithEvents = null;
+                    loadCurrentNames();
+                })
+                .withFailureHandler(function(error) {
+                    console.error('Error updating recurring intervals:', error);
+                    alert('Error updating recurring intervals: ' + (error.message || error.toString()));
+                    
+                    // Refresh the names list anyway
+                    loadCurrentNames();
+                })
+                .updateRecurringIntervals();
         }
         
         
