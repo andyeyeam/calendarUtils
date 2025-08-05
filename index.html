@@ -903,9 +903,6 @@
             Skip Levels
         </button>
         
-        <button class="button secondary" onclick="testClick()" style="margin-top: 10px;">
-            Test JavaScript
-        </button>
         
         
     </div>
@@ -1142,21 +1139,12 @@
                    (Date.now() - cacheTimestamp) < CACHE_DURATION;
         }
 
-        // Development mode flag - set to true for local testing
-        var DEV_MODE = true; // Change to false when deploying to Google Apps Script
-        
-        // Test function to verify JavaScript is working
-        function testClick() {
-            alert('JavaScript is working! DEV_MODE = ' + DEV_MODE);
-            console.log('Test function called successfully');
-        }
         
         function handleNames() {
             console.log('Names button clicked');
-            alert('handleNames() called - DEV_MODE = ' + DEV_MODE); // Debug alert
             
-            // Check if google.script.run is available (skip in dev mode)
-            if (!DEV_MODE && (typeof google === 'undefined' || typeof google.script === 'undefined')) {
+            // Check if google.script.run is available
+            if (typeof google === 'undefined' || typeof google.script === 'undefined') {
                 alert('Error: Google Apps Script not available. Make sure this is running as a deployed web app.');
                 console.error('google.script.run not available');
                 return;
@@ -1193,11 +1181,6 @@
                                     <span class="tooltip">Add all missing recurring meetings</span>
                                 </button>
                                 
-                                <!-- Remove All Meetings Icon -->
-                                <button class="action-icon remove-meeting" onclick="deleteAllMeetings();">
-                                    📅
-                                    <span class="tooltip">Remove all recurring meetings</span>
-                                </button>
                                 
                                 <!-- Remove All People Icon -->
                                 <button class="action-icon remove-person" onclick="clearAllNames();">
@@ -1530,80 +1513,35 @@
             `;
             
             // Load names with complete calendar data before displaying
-            if (DEV_MODE) {
-                // Mock data for development mode
-                console.log('DEV MODE: Using mock data');
-                const mockNamesWithEvents = [
-                    {
-                        name: "John Smith",
-                        found: true,
-                        eventId: "mock_event_1",
-                        eventTitle: "Skip Level: John Smith",
-                        calendarLink: "https://calendar.google.com/calendar/u/0/r/day/2024/1/15",
-                        nextOccurrence: "1/15/2024 2:00:00 PM"
-                    },
-                    {
-                        name: "Sarah Johnson",
-                        found: false,
-                        eventId: null,
-                        eventTitle: null,
-                        calendarLink: null,
-                        nextOccurrence: null
-                    },
-                    {
-                        name: "Mike Wilson",
-                        found: true,
-                        eventId: "mock_event_2",
-                        eventTitle: "Skip Level: Mike Wilson",
-                        calendarLink: "https://calendar.google.com/calendar/u/0/r/day/2024/1/22",
-                        nextOccurrence: "1/22/2024 10:00:00 AM"
-                    },
-                    {
-                        name: "Emily Davis",
-                        found: false,
-                        eventId: null,
-                        eventTitle: null,
-                        calendarLink: null,
-                        nextOccurrence: null
-                    }
-                ];
-                
-                // Display mock results
-                cachedNamesWithEvents = mockNamesWithEvents;
-                cacheTimestamp = Date.now();
-                displayCurrentNames(mockNamesWithEvents);
-            } else {
-                // Production mode - use Google Apps Script
-                google.script.run
-                    .withSuccessHandler(function(namesWithEvents) {
-                        console.log('Complete calendar data loaded:', namesWithEvents);
-                        
-                        if (!namesWithEvents || namesWithEvents.length === 0) {
-                            document.getElementById('namesList').innerHTML = `
-                                <div style="color: #666; text-align: center; font-style: italic;">
-                                    No names currently loaded. Upload a text file to get started.
-                                </div>
-                            `;
-                            cachedNamesWithEvents = [];
-                            cacheTimestamp = Date.now();
-                            return;
-                        }
-                        
-                        // Display complete results with calendar data
-                        cachedNamesWithEvents = namesWithEvents;
-                        cacheTimestamp = Date.now();
-                        displayCurrentNames(namesWithEvents);
-                    })
-                    .withFailureHandler(function(error) {
-                        console.error('Error loading names with calendar events:', error);
+            google.script.run
+                .withSuccessHandler(function(namesWithEvents) {
+                    console.log('Complete calendar data loaded:', namesWithEvents);
+                    
+                    if (!namesWithEvents || namesWithEvents.length === 0) {
                         document.getElementById('namesList').innerHTML = `
-                            <div style="color: red; text-align: center;">
-                                Error loading names: ${error.message || error.toString()}
+                            <div style="color: #666; text-align: center; font-style: italic;">
+                                No names currently loaded. Upload a text file to get started.
                             </div>
                         `;
-                    })
-                    .getNamesWithCalendarEvents();
-            }
+                        cachedNamesWithEvents = [];
+                        cacheTimestamp = Date.now();
+                        return;
+                    }
+                    
+                    // Display complete results with calendar data
+                    cachedNamesWithEvents = namesWithEvents;
+                    cacheTimestamp = Date.now();
+                    displayCurrentNames(namesWithEvents);
+                })
+                .withFailureHandler(function(error) {
+                    console.error('Error loading names with calendar events:', error);
+                    document.getElementById('namesList').innerHTML = `
+                        <div style="color: red; text-align: center;">
+                            Error loading names: ${error.message || error.toString()}
+                        </div>
+                    `;
+                })
+                .getNamesWithCalendarEvents();
         }
         
         function toggleActionsDropdown() {
@@ -1863,116 +1801,6 @@
                 .createMeetingsForSpecificNames(namesToProcess);
         }
         
-        function deleteAllMeetings() {
-            console.log('Remove all recurring meetings requested');
-            
-            if (!cachedNamesWithEvents || cachedNamesWithEvents.length === 0) {
-                alert('No names loaded. Please refresh the list first.');
-                return;
-            }
-            
-            // Find names that have calendar events (meeting links)
-            const namesWithMeetings = cachedNamesWithEvents.filter(nameData => nameData.found);
-            
-            if (namesWithMeetings.length === 0) {
-                alert('No recurring meetings found to remove.');
-                return;
-            }
-            
-            // Show detailed confirmation
-            const confirmMessage = `⚠️ REMOVE ALL RECURRING MEETINGS ⚠️\n\n` +
-                                 `This action will:\n` +
-                                 `• DELETE all recurring Skip Level calendar events for ${namesWithMeetings.length} people\n` +
-                                 `• CLEAR calendar event details from the Google Sheet\n` +
-                                 `• KEEP all names in the list\n\n` +
-                                 `People with meetings to be removed:\n` +
-                                 `• ${namesWithMeetings.map(n => n.name).join('\\n• ')}\n\n` +
-                                 `The names will remain but without scheduled meetings.\n\n` +
-                                 `This action CANNOT be undone!\n\n` +
-                                 `Are you sure you want to proceed?`;
-            
-            if (!confirm(confirmMessage)) {
-                return;
-            }
-            
-            // Show loading state
-            document.getElementById('namesList').innerHTML = `
-                <div class="loading-container">
-                    <div class="spinner"></div>
-                    <p>Removing all recurring meetings...</p>
-                    <div style="color: #6c757d; font-size: 12px; margin-top: 10px;">
-                        Processing ${namesWithMeetings.length} people with meetings. Please wait...
-                    </div>
-                </div>
-            `;
-            
-            // Remove all recurring meetings but keep the names
-            google.script.run
-                .withSuccessHandler(function(result) {
-                    console.log('All recurring meetings removal completed:', result);
-                    
-                    let successMessage = '';
-                    if (result.success) {
-                        successMessage = `✅ RECURRING MEETINGS REMOVED\n\n` +
-                                       `Successfully processed ${result.totalPeople} people:\n` +
-                                       `• Calendar meetings removed: ${result.meetingsRemoved}\n` +
-                                       `• People without meetings: ${result.peopleWithoutMeetings}\n\n` +
-                                       `All names remain in the list but calendar events have been cleared.`;
-                    } else {
-                        successMessage = `⚠️ PARTIAL SUCCESS\n\n` +
-                                       `Some meetings may have been removed, but there were errors:\n` +
-                                       `${result.errors ? result.errors.join('\\n') : 'Unknown error occurred'}`;
-                    }
-                    
-                    alert(successMessage);
-                    
-                    // Refresh the names list to show updated status
-                    refreshCurrentNames();
-                })
-                .withFailureHandler(function(error) {
-                    console.error('Error removing all recurring meetings:', error);
-                    alert('Error removing recurring meetings: ' + (error.message || error.toString()));
-                    
-                    // Refresh the names list anyway
-                    refreshCurrentNames();
-                })
-                .removeAllRecurringMeetingsOnly();
-                            console.log('All names cleared successfully:', clearResult);
-                            
-                            // Clear cache and refresh the list
-                            cachedNamesWithEvents = null;
-                            cacheTimestamp = null;
-                            
-                            // Show success message
-                            let successMessage = `✓ Successfully cleared everything!\n\n`;
-                            successMessage += `Summary:\n`;
-                            successMessage += `• Names cleared: ${totalNames}\n`;
-                            successMessage += `• Calendar events deleted: ${deleteResult.meetingsDeleted}\n`;
-                            
-                            if (deleteResult.errors && deleteResult.errors.length > 0) {
-                                successMessage += `\n\nWarnings:\n`;
-                                successMessage += `• ${deleteResult.errors.join('\\n• ')}`;
-                            }
-                            
-                            alert(successMessage);
-                            
-                            // Refresh the names list to show updated status
-                            loadCurrentNames();
-                        })
-                        .withFailureHandler(function(error) {
-                            console.error('Error clearing names:', error);
-                            alert('Error clearing names: ' + (error.message || error.toString()));
-                            loadCurrentNames();
-                        })
-                        .clearSkipLevelNames();
-                })
-                .withFailureHandler(function(error) {
-                    console.error('Error deleting calendar events:', error);
-                    alert('Error deleting calendar events: ' + (error.message || error.toString()));
-                    loadCurrentNames();
-                })
-                .deleteAllRecurringMeetings();
-        }
         
         function displayCurrentNames(namesWithEvents) {
             console.log('displayCurrentNames called with:', namesWithEvents);
@@ -2353,8 +2181,8 @@
         function addRecurringMeeting(nameToAdd) {
             console.log('Creating recurring meeting for:', nameToAdd);
             
-            // Check if we're in Google Apps Script environment (skip in dev mode)
-            if (!DEV_MODE && (typeof google === 'undefined' || !google.script)) {
+            // Check if we're in Google Apps Script environment
+            if (typeof google === 'undefined' || !google.script) {
                 alert('This functionality requires Google Apps Script environment. Please deploy to Google Apps Script to test.');
                 return;
             }
@@ -2389,114 +2217,65 @@
             `;
             
             // Call backend function to create meeting for this specific name
-            if (DEV_MODE) {
-                // Mock successful meeting creation in dev mode
-                console.log('DEV MODE: Simulating meeting creation for', nameToAdd);
-                setTimeout(() => {
-                    const mockResult = {
-                        success: true,
-                        meetingsCreated: 1,
-                        weeksCalculated: 2,
-                        createdMeetings: [{
-                            name: nameToAdd,
-                            dayOfWeek: "Tuesday",
-                            time: "14:00",
-                            duration: "30",
-                            weekFound: 1
-                        }]
-                    };
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    console.log('Meeting creation completed:', result);
                     
-                    const meeting = mockResult.createdMeetings[0];
-                    const message = `✅ MEETING CREATED SUCCESSFULLY!\n\n` +
-                            `Person: ${nameToAdd}\n` +
-                            `Day: ${meeting.dayOfWeek}\n` +
-                            `Time: ${meeting.time}\n` +
-                            `Duration: ${meeting.duration} minutes\n` +
-                            `Recurring every: ${mockResult.weeksCalculated} weeks\n` +
-                            `Week found: ${meeting.weekFound}`;
+                    let message = '';
+                    if (result.success && result.meetingsCreated > 0) {
+                        const meeting = result.createdMeetings[0]; // Should be one meeting for this name
+                        message = `✅ MEETING CREATED SUCCESSFULLY!\n\n` +
+                                `Person: ${nameToAdd}\n` +
+                                `Day: ${meeting.dayOfWeek}\n` +
+                                `Time: ${meeting.time}\n` +
+                                `Duration: ${meeting.duration} minutes\n` +
+                                `Recurring every: ${result.weeksCalculated} weeks\n` +
+                                `Week found: ${meeting.weekFound}`;
+                    } else {
+                        message = `❌ MEETING CREATION FAILED\n\n` +
+                                `Errors encountered:\n${result.errors.join('\n')}`;
+                    }
                     
-                    showMessage(message, 'Success');
+                    alert(message);
                     
-                    // Update mock data to show the person now has a meeting
-                    const updatedMockData = cachedNamesWithEvents.map(person => {
-                        if (person.name === nameToAdd) {
-                            return {
-                                ...person,
-                                found: true,
-                                eventId: "mock_event_new",
-                                eventTitle: "Skip Level: " + nameToAdd,
-                                calendarLink: "https://calendar.google.com/calendar/u/0/r/day/2024/1/29",
-                                nextOccurrence: "1/29/2024 2:00:00 PM"
-                            };
-                        }
-                        return person;
-                    });
+                    // Refresh the names list to show updated calendar status
+                    google.script.run
+                        .withSuccessHandler(function(refreshedNamesWithEvents) {
+                            console.log('Names list refreshed after meeting creation');
+                            cachedNamesWithEvents = refreshedNamesWithEvents;
+                            displayCurrentNames(refreshedNamesWithEvents);
+                        })
+                        .withFailureHandler(function(error) {
+                            console.error('Error refreshing names list:', error);
+                            // Still show the previous state
+                            displayCurrentNames(cachedNamesWithEvents);
+                            alert('Meeting may have been created, but there was an error refreshing the display: ' + (error.message || error.toString()));
+                        })
+                        .getNamesWithCalendarEvents();
+                })
+                .withFailureHandler(function(error) {
+                    console.error('Error creating meeting:', error);
+                    // Restore the names list
+                    displayCurrentNames(cachedNamesWithEvents);
                     
-                    cachedNamesWithEvents = updatedMockData;
-                    displayCurrentNames(updatedMockData);
-                }, 1500); // Simulate API delay
-            } else {
-                // Production mode - use Google Apps Script
-                google.script.run
-                    .withSuccessHandler(function(result) {
-                        console.log('Meeting creation completed:', result);
-                        
-                        let message = '';
-                        if (result.success && result.meetingsCreated > 0) {
-                            const meeting = result.createdMeetings[0]; // Should be one meeting for this name
-                            message = `✅ MEETING CREATED SUCCESSFULLY!\n\n` +
-                                    `Person: ${nameToAdd}\n` +
-                                    `Day: ${meeting.dayOfWeek}\n` +
-                                    `Time: ${meeting.time}\n` +
-                                    `Duration: ${meeting.duration} minutes\n` +
-                                    `Recurring every: ${result.weeksCalculated} weeks\n` +
-                                    `Week found: ${meeting.weekFound}`;
-                        } else {
-                            message = `❌ MEETING CREATION FAILED\n\n` +
-                                    `Errors encountered:\n${result.errors.join('\n')}`;
-                        }
-                        
-                        alert(message);
-                        
-                        // Refresh the names list to show updated calendar status
-                        google.script.run
-                            .withSuccessHandler(function(refreshedNamesWithEvents) {
-                                console.log('Names list refreshed after meeting creation');
-                                cachedNamesWithEvents = refreshedNamesWithEvents;
-                                displayCurrentNames(refreshedNamesWithEvents);
-                            })
-                            .withFailureHandler(function(error) {
-                                console.error('Error refreshing names list:', error);
-                                // Still show the previous state
-                                displayCurrentNames(cachedNamesWithEvents);
-                                alert('Meeting may have been created, but there was an error refreshing the display: ' + (error.message || error.toString()));
-                            })
-                            .getNamesWithCalendarEvents();
-                    })
-                    .withFailureHandler(function(error) {
-                        console.error('Error creating meeting:', error);
-                        // Restore the names list
-                        displayCurrentNames(cachedNamesWithEvents);
-                        
-                        // Check for specific error types and provide appropriate guidance
-                        const errorMessage = error.message || error.toString();
-                        if (errorMessage.includes('Recurring interval has not been defined')) {
-                            alert('❌ RECURRING INTERVAL NOT DEFINED\n\n' +
-                                  'The "Recurring Interval" property has not been set in the Properties tab of the CalendarUtilities State Sheet.\n\n' +
-                                  'To fix this:\n' +
-                                  '1. Open the CalendarUtilities State Sheet\n' +
-                                  '2. Go to the "Properties" tab\n' +
-                                  '3. Set the "Recurring Interval" value (1-26 weeks)\n' +
-                                  '4. Try creating the meeting again');
-                        } else if (errorMessage.includes('MEETING CANNOT BE SCHEDULED')) {
-                            // Display the detailed error message as-is since it already contains formatting and solutions
-                            alert(errorMessage);
-                        } else {
-                            alert('Error creating meeting: ' + errorMessage);
-                        }
-                    })
-                    .createMeetingsForSpecificNames([nameToAdd]);
-            }
+                    // Check for specific error types and provide appropriate guidance
+                    const errorMessage = error.message || error.toString();
+                    if (errorMessage.includes('Recurring interval has not been defined')) {
+                        alert('❌ RECURRING INTERVAL NOT DEFINED\n\n' +
+                              'The "Recurring Interval" property has not been set in the Properties tab of the CalendarUtilities State Sheet.\n\n' +
+                              'To fix this:\n' +
+                              '1. Open the CalendarUtilities State Sheet\n' +
+                              '2. Go to the "Properties" tab\n' +
+                              '3. Set the "Recurring Interval" value (1-26 weeks)\n' +
+                              '4. Try creating the meeting again');
+                    } else if (errorMessage.includes('MEETING CANNOT BE SCHEDULED')) {
+                        // Display the detailed error message as-is since it already contains formatting and solutions
+                        alert(errorMessage);
+                    } else {
+                        alert('Error creating meeting: ' + errorMessage);
+                    }
+                })
+                .createMeetingsForSpecificNames([nameToAdd]);
         }
         
         function removeRecurringMeeting(nameToRemove) {
